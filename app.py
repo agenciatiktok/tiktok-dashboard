@@ -1,7 +1,7 @@
 # ====
 # streamlit_app/app.py
 # Sistema de consulta de contratos TikTok Live
-# Cada contrato ve TODOS sus usuarios (cumplen o no)
+# MODO PÚBLICO: Columnas ocultas según configuración
 # Acceso por token único
 # ====
 
@@ -158,6 +158,15 @@ def verificar_token(token):
     if resultado.data:
         return resultado.data[0]
     return None
+
+def obtener_columnas_ocultas(contrato):
+    """Obtiene columnas ocultas para el contrato desde Supabase"""
+    supabase = get_supabase()
+    resultado = supabase.table('config_columnas_ocultas').select('columna').eq('contrato', contrato).execute()
+    
+    if resultado.data:
+        return [r['columna'] for r in resultado.data]
+    return []
 
 def obtener_periodos_disponibles():
     """Obtiene todos los periodos disponibles"""
@@ -464,6 +473,9 @@ def main():
     contrato = info_contrato['contrato']
     nombre = info_contrato.get('nombre', contrato)
     
+    # OBTENER COLUMNAS OCULTAS PARA ESTE CONTRATO
+    columnas_ocultas_config = obtener_columnas_ocultas(contrato)
+    
     # ==== HEADER ====
     
     col_logo, col_titulo = st.columns([1, 4])
@@ -532,22 +544,50 @@ def main():
         "📊 Resumen del Periodo"
     ])
     
-    # Preparar dataframe para mostrar
+    # Preparar dataframe para mostrar CON COLUMNAS OCULTAS
     def formatear_dataframe(df_input):
-        """Formatea el dataframe para visualización"""
+        """Formatea el dataframe para visualización APLICANDO OCULTAR COLUMNAS"""
         
-        # Orden de columnas solicitado
-        columnas_orden = ['usuario', 'agencia', 'dias', 'duracion', 'diamantes', 'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal']
+        # Mapeo de columnas config -> columnas reales
+        mapeo_ocultar = {
+            'coins': 'incentivo_coins',
+            'paypal': 'incentivo_paypal',
+            'sueldo': ['coins_bruto', 'paypal_bruto']  # Sueldo oculta ambas
+        }
         
-        # Filtrar solo columnas que existen
-        columnas_mostrar = [col for col in columnas_orden if col in df_input.columns]
+        # Determinar qué columnas reales hay que ocultar
+        columnas_a_ocultar = set()
+        
+        # SIEMPRE ocultar Agencia
+        columnas_a_ocultar.add('agencia')
+        
+        # Ocultar según configuración
+        for config in columnas_ocultas_config:
+            if config in mapeo_ocultar:
+                valor = mapeo_ocultar[config]
+                if isinstance(valor, list):
+                    columnas_a_ocultar.update(valor)
+                else:
+                    columnas_a_ocultar.add(valor)
+        
+        # Orden de columnas base (incluye todas las posibles)
+        columnas_orden_completo = [
+            'usuario', 'agencia', 'dias', 'duracion', 'diamantes', 
+            'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal'
+        ]
+        
+        # Filtrar: solo mostrar las que NO están ocultas y existen
+        columnas_mostrar = [
+            col for col in columnas_orden_completo 
+            if col in df_input.columns and col not in columnas_a_ocultar
+        ]
         
         df_show = df_input[columnas_mostrar].copy()
         
         # Renombrar columnas
         nombres_columnas = {
             'usuario': 'Usuario',
-            'agencia': 'Agencia',
+            'agencia': 'Agencia',  # Esta no se mostrará porque siempre está oculta
             'dias': 'Días',
             'duracion': 'Horas',
             'diamantes': 'Diamantes',
@@ -557,7 +597,7 @@ def main():
             'incentivo_paypal': 'Incentivo PayPal'
         }
         
-        df_show = df_show.rename(columns=nombres_columnas)
+        df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
         
         # Formatear números
         if 'Diamantes' in df_show.columns:
@@ -717,7 +757,7 @@ def main():
         Los incentivos se calculan según la tabla de incentivos horizontales y el nivel alcanzado.
         Solo los usuarios que **CUMPLEN** reciben incentivos.
         
-        Se muestran **ambas columnas** (Coin y PayPal) y se llenan según la configuración del contrato.
+        Se muestran las columnas según la configuración de tu contrato.
         
         ### 🎁 Beneficio Especial:
         Algunos contratos tienen el beneficio **"Nivel 1 = Tabla 3"**, lo que significa que cualquier usuario que cumpla el nivel mínimo (Nivel 1) recibe incentivos de Nivel 3.
