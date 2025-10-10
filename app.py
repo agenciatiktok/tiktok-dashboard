@@ -227,7 +227,12 @@ def obtener_datos_contrato(contrato, fecha_datos):
     
     nivel1_tabla3 = False
     if config_resultado.data and len(config_resultado.data) > 0:
-        nivel1_tabla3 = config_resultado.data[0].get('nivel1_tabla3', False)
+        valor = config_resultado.data[0].get('nivel1_tabla3', False)
+        # CORRECCIÓN: Manejar tanto boolean como string
+        if isinstance(valor, str):
+            nivel1_tabla3 = valor.upper() in ['SI', 'YES', 'TRUE', '1', 'SÍ']
+        else:
+            nivel1_tabla3 = bool(valor)
     
     # 2. Obtener usuarios
     resultado = supabase.table('usuarios_tiktok')\
@@ -238,6 +243,39 @@ def obtener_datos_contrato(contrato, fecha_datos):
     
     if resultado.data:
         df = pd.DataFrame(resultado.data)
+        
+        # CORRECCIÓN: Consultar histórico para usuarios sin nombre
+        usuarios_sin_nombre = df[df['usuario'].isna() | (df['usuario'] == '')]
+        
+        if not usuarios_sin_nombre.empty:
+            # Obtener IDs únicos de usuarios sin nombre
+            ids_sin_nombre = usuarios_sin_nombre['id_tiktok'].unique().tolist()
+            
+            # Consultar histórico
+            historico = supabase.table('historico_usuarios')\
+                .select('id_tiktok, usuario_1, usuario_2, usuario_3')\
+                .in_('id_tiktok', ids_sin_nombre)\
+                .execute()
+            
+            if historico.data:
+                # Crear diccionario de id_tiktok -> nombre
+                nombres_historico = {}
+                for registro in historico.data:
+                    id_tiktok = registro['id_tiktok']
+                    # Buscar primer nombre no vacío
+                    nombre = (registro.get('usuario_1') or 
+                             registro.get('usuario_2') or 
+                             registro.get('usuario_3') or 
+                             f"Usuario_{id_tiktok[:8]}")
+                    nombres_historico[id_tiktok] = nombre
+                
+                # Actualizar nombres en el dataframe
+                def obtener_nombre(row):
+                    if pd.isna(row['usuario']) or row['usuario'] == '':
+                        return nombres_historico.get(row['id_tiktok'], f"Usuario_{row['id_tiktok'][:8]}")
+                    return row['usuario']
+                
+                df['usuario'] = df.apply(obtener_nombre, axis=1)
         
         # Horas ya viene como numeric, no necesita conversión
         if 'horas' not in df.columns:
@@ -468,7 +506,7 @@ def main():
     
     st.subheader("📋 Listado de Usuarios")
     
-    # Tabs para separar usuarios - AHORA CON RESUMEN AL FINAL
+    # Tabs para separar usuarios
     tab1, tab2, tab3, tab4 = st.tabs([
         "👥 Todos los Usuarios", 
         "✅ Usuarios que Cumplen", 
@@ -566,7 +604,7 @@ def main():
             st.success("¡Todos los usuarios cumplen requisitos!")
     
     with tab4:
-        # ==== RESUMEN DEL PERIODO (AHORA EN PESTAÑA) ====
+        # ==== RESUMEN DEL PERIODO ====
         
         st.markdown("### 📈 Métricas Generales")
         
