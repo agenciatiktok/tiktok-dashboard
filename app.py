@@ -244,40 +244,63 @@ def obtener_datos_contrato(contrato, fecha_datos):
     if resultado.data:
         df = pd.DataFrame(resultado.data)
         
-        # CORRECCIÓN: Consultar histórico para usuarios sin nombre
-        usuarios_sin_nombre = df[df['usuario'].isna() | (df['usuario'] == '')]
+        # CORRECCIÓN MEJORADA: Consultar histórico para usuarios sin nombre
+        # Identificar usuarios sin nombre (NULL o vacío)
+        mask_sin_nombre = df['usuario'].isna() | (df['usuario'] == '') | (df['usuario'].str.strip() == '')
+        usuarios_sin_nombre = df[mask_sin_nombre]
         
         if not usuarios_sin_nombre.empty:
+            print(f"DEBUG: Encontrados {len(usuarios_sin_nombre)} usuarios sin nombre")
+            
             # Obtener IDs únicos de usuarios sin nombre
-            ids_sin_nombre = usuarios_sin_nombre['id_tiktok'].unique().tolist()
+            ids_sin_nombre = usuarios_sin_nombre['id_tiktok'].astype(str).unique().tolist()
+            print(f"DEBUG: IDs a buscar en histórico: {ids_sin_nombre[:3]}...")
             
-            # Consultar histórico
-            historico = supabase.table('historico_usuarios')\
-                .select('id_tiktok, usuario_1, usuario_2, usuario_3')\
-                .in_('id_tiktok', ids_sin_nombre)\
-                .execute()
+            # Consultar histórico - PROBAR AMBOS FORMATOS DE COLUMNAS
+            try:
+                historico = supabase.table('historico_usuarios')\
+                    .select('id_tiktok, usuario_1, usuario_2, usuario_3')\
+                    .in_('id_tiktok', ids_sin_nombre)\
+                    .execute()
+                
+                print(f"DEBUG: Registros encontrados en histórico: {len(historico.data) if historico.data else 0}")
+                
+                if historico.data:
+                    # Crear diccionario de id_tiktok -> nombre
+                    nombres_historico = {}
+                    for registro in historico.data:
+                        id_tiktok = str(registro['id_tiktok'])
+                        # Buscar primer nombre no vacío (intentar con minúsculas y mayúsculas)
+                        nombre = None
+                        for col in ['usuario_1', 'Usuario_1', 'usuario_2', 'Usuario_2', 'usuario_3', 'Usuario_3']:
+                            valor = registro.get(col, '')
+                            if valor and str(valor).strip() and str(valor).strip().lower() not in ['', 'nan', 'none', 'null']:
+                                nombre = str(valor).strip()
+                                break
+                        
+                        if nombre:
+                            nombres_historico[id_tiktok] = nombre
+                            print(f"DEBUG: ID {id_tiktok[:10]}... -> {nombre}")
+                        else:
+                            # Si no hay nombre en el histórico, usar ID truncado
+                            nombres_historico[id_tiktok] = f"Usuario_{id_tiktok[:8]}"
+                    
+                    print(f"DEBUG: Nombres encontrados en histórico: {len(nombres_historico)}")
+                    
+                    # Actualizar nombres en el dataframe
+                    def obtener_nombre(row):
+                        if pd.isna(row['usuario']) or str(row['usuario']).strip() == '':
+                            id_str = str(row['id_tiktok'])
+                            return nombres_historico.get(id_str, f"Usuario_{id_str[:8]}")
+                        return row['usuario']
+                    
+                    df['usuario'] = df.apply(obtener_nombre, axis=1)
+                    print(f"DEBUG: Usuarios actualizados con nombres del histórico")
             
-            if historico.data:
-                # Crear diccionario de id_tiktok -> nombre
-                nombres_historico = {}
-                for registro in historico.data:
-                    id_tiktok = registro['id_tiktok']
-                    # Buscar primer nombre no vacío
-                    nombre = (registro.get('usuario_1') or 
-                             registro.get('usuario_2') or 
-                             registro.get('usuario_3') or 
-                             f"Usuario_{id_tiktok[:8]}")
-                    nombres_historico[id_tiktok] = nombre
-                
-                # Actualizar nombres en el dataframe
-                def obtener_nombre(row):
-                    if pd.isna(row['usuario']) or row['usuario'] == '':
-                        return nombres_historico.get(row['id_tiktok'], f"Usuario_{row['id_tiktok'][:8]}")
-                    return row['usuario']
-                
-                df['usuario'] = df.apply(obtener_nombre, axis=1)
+            except Exception as e:
+                print(f"ERROR consultando histórico: {e}")
         
-        # Horas ya viene como numeric, no necesita conversión
+        # Horas ya viene como numeric
         if 'horas' not in df.columns:
             df['horas'] = 0
         
@@ -291,28 +314,23 @@ def obtener_datos_contrato(contrato, fecha_datos):
         df_incentivos = obtener_incentivos()
         
         if not df_incentivos.empty:
-            # Calcular incentivos usando nivel ajustado si aplica nivel1_tabla3
+            # Calcular incentivos
             def calcular_incentivo_row(row):
                 nivel_original = row['nivel_original']
-                
-                # Si el contrato tiene nivel1_tabla3 Y el usuario cumple (nivel >= 1), usar nivel 3
                 if nivel1_tabla3 and nivel_original >= 1:
                     nivel_para_incentivo = 3
                 else:
                     nivel_para_incentivo = nivel_original
-                
                 return calcular_incentivos(df_incentivos, row.get('diamantes', 0), nivel_para_incentivo)
             
             incentivos = df.apply(calcular_incentivo_row, axis=1, result_type='expand')
             df['incentivo_coins'] = incentivos[0]
             df['incentivo_paypal'] = incentivos[1]
             
-            # Asignar nivel FINAL para mostrar en la tabla
+            # Asignar nivel FINAL
             if nivel1_tabla3:
-                # Si tiene nivel1_tabla3, mostrar nivel 3 para todos los que cumplen
                 df['nivel'] = df['nivel_original'].apply(lambda n: 3 if n >= 1 else 0)
             else:
-                # Si no, mostrar el nivel original
                 df['nivel'] = df['nivel_original']
         else:
             df['incentivo_coins'] = 0
