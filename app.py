@@ -542,14 +542,15 @@ def main():
     
     with col_whatsapp:
         # Botón de WhatsApp
-        whatsapp_url = "https://wa.me/5256598425014?text=Hola,%20tengo%20una%20consulta%20sobre%20mi%20contrato"
+        whatsapp_url = "https://wa.me/5215659842514?text=Hola,%20tengo%20una%20consulta%20sobre%20mi%20contrato"
         st.markdown(f"""
             <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
                 <img src="https://img.icons8.com/color/48/000000/whatsapp--v1.png" class="whatsapp-icon"/>
                 <span>Soporte / Batallas</span>
             </a>
         """, unsafe_allow_html=True)
-        st.caption("📞 +52 56 5984 2514")
+        st.caption("📞 +52 1 56 5984 2514")
+        st.caption("🏢 **Administración General**")
     
     st.divider()
     
