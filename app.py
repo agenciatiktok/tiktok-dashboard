@@ -125,6 +125,33 @@ st.markdown("""
         border: 2px solid var(--tiktok-cyan);
         border-radius: 10px;
     }
+    
+    /* Botón WhatsApp */
+    .whatsapp-button {
+        background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 25px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: bold;
+        font-size: 16px;
+        box-shadow: 0 4px 6px rgba(37, 211, 102, 0.3);
+        transition: all 0.3s ease;
+    }
+    
+    .whatsapp-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(37, 211, 102, 0.4);
+        text-decoration: none;
+    }
+    
+    .whatsapp-icon {
+        width: 24px;
+        height: 24px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -376,6 +403,32 @@ def es_ultimo_dia_mes(fecha_str):
     except:
         return False
 
+def obtener_mes_español(fecha_str):
+    """Convierte fecha a formato 'Mes YYYY' en español"""
+    meses = {
+        1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+        5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+    }
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d')
+        return f"{meses[fecha.month]} {fecha.year}"
+    except:
+        return fecha_str
+
+def formatear_fecha_español(fecha_str):
+    """Convierte fecha a formato 'DD de Mes, YYYY' en español"""
+    meses = {
+        1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+        5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+        9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+    }
+    try:
+        fecha = datetime.strptime(fecha_str, '%Y-%m-%d')
+        return f"{fecha.day} de {meses[fecha.month]}, {fecha.year}"
+    except:
+        return fecha_str
+
 def obtener_mensaje_periodo(fecha_str, usuarios_cumplen, total_usuarios):
     """Genera mensaje motivacional según la fecha del periodo"""
     es_cierre = es_ultimo_dia_mes(fecha_str)
@@ -478,7 +531,7 @@ def main():
     
     # ==== HEADER ====
     
-    col_logo, col_titulo = st.columns([1, 4])
+    col_logo, col_titulo, col_whatsapp = st.columns([1, 3, 2])
     
     with col_logo:
         st.image("https://img.icons8.com/color/96/0000/tiktok--v1.png", width=80)
@@ -486,6 +539,17 @@ def main():
     with col_titulo:
         st.title(f"📊 Sistema de Consulta - Contrato {contrato}")
         st.subheader(f"👤 {nombre}")
+    
+    with col_whatsapp:
+        # Botón de WhatsApp
+        whatsapp_url = "https://wa.me/5256598425014?text=Hola,%20tengo%20una%20consulta%20sobre%20mi%20contrato"
+        st.markdown(f"""
+            <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
+                <img src="https://img.icons8.com/color/48/000000/whatsapp--v1.png" class="whatsapp-icon"/>
+                <span>Soporte / Batallas</span>
+            </a>
+        """, unsafe_allow_html=True)
+        st.caption("📞 +52 56 5984 2514")
     
     st.divider()
     
@@ -503,11 +567,11 @@ def main():
         periodo_seleccionado = st.selectbox(
             "📅 **Seleccionar periodo:**",
             periodos,
-            format_func=lambda x: datetime.strptime(x, '%Y-%m-%d').strftime('%d de %B, %Y')
+            format_func=formatear_fecha_español
         )
     
     with col2:
-        st.metric("📆 Periodo activo", datetime.strptime(periodo_seleccionado, '%Y-%m-%d').strftime('%B %Y'))
+        st.metric("📆 Periodo activo", obtener_mes_español(periodo_seleccionado))
     
     # ==== CARGAR DATOS ====
     
@@ -742,26 +806,24 @@ def main():
     # ==== EXPANDER CON INFO ADICIONAL ====
     
     with st.expander("ℹ️ Información sobre niveles de cumplimiento"):
-        st.markdown("""
-        ### 🎯 Niveles de Cumplimiento:
-        
-        - **Nivel 3** 🥇: ≥20 días Y ≥40 horas
-        - **Nivel 2** 🥈: ≥14 días Y ≥30 horas
-        - **Nivel 1** 🥉: ≥7 días Y ≥15 horas
-        - **Nivel 0** ⚫: No cumple requisitos
-        
-        ### ✅ Criterio de Cumplimiento:
-        Un usuario **CUMPLE** cuando alcanza al menos **Nivel 1** (≥7 días Y ≥15 horas)
-        
-        ### 💰 Incentivos:
-        Los incentivos se calculan según la tabla de incentivos horizontales y el nivel alcanzado.
-        Solo los usuarios que **CUMPLEN** reciben incentivos.
-        
-        Se muestran las columnas según la configuración de tu contrato.
-        
-        ### 🎁 Beneficio Especial:
-        Algunos contratos tienen el beneficio **"Nivel 1 = Tabla 3"**, lo que significa que cualquier usuario que cumpla el nivel mínimo (Nivel 1) recibe incentivos de Nivel 3.
-        """)
+        st.write("**🎯 Niveles de Cumplimiento:**")
+        st.write("")
+        st.write("- Nivel 3 🥇: Mayor o igual a 20 días Y 40 horas")
+        st.write("- Nivel 2 🥈: Mayor o igual a 14 días Y 30 horas")
+        st.write("- Nivel 1 🥉: Mayor o igual a 7 días Y 15 horas")
+        st.write("- Nivel 0 ⚫: No cumple requisitos")
+        st.write("")
+        st.write("**✅ Criterio de Cumplimiento:**")
+        st.write("Un usuario CUMPLE cuando alcanza al menos Nivel 1 (7 días Y 15 horas)")
+        st.write("")
+        st.write("**💰 Incentivos:**")
+        st.write("Los incentivos se calculan según la tabla de incentivos horizontales y el nivel alcanzado.")
+        st.write("Solo los usuarios que CUMPLEN reciben incentivos.")
+        st.write("")
+        st.write("Se muestran las columnas según la configuración de tu contrato.")
+        st.write("")
+        st.write("**🎁 Beneficio Especial:**")
+        st.write("Algunos contratos tienen el beneficio 'Nivel 1 = Tabla 3', lo que significa que cualquier usuario que cumpla el nivel mínimo (Nivel 1) recibe incentivos de Nivel 3.")
 
 if __name__ == "__main__":
     main()
