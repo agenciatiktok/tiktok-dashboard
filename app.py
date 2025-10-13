@@ -129,7 +129,7 @@ st.markdown("""
     /* Botón WhatsApp */
     .whatsapp-button {
         background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-        color: white;
+        color: #000000 !important;
         padding: 12px 24px;
         border-radius: 25px;
         text-decoration: none;
@@ -146,11 +146,24 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 6px 12px rgba(37, 211, 102, 0.4);
         text-decoration: none;
+        background: linear-gradient(135deg, #2BE67D 0%, #1AA68B 100%);
     }
     
     .whatsapp-icon {
         width: 24px;
         height: 24px;
+    }
+    
+    .whatsapp-numero {
+        font-size: 18px !important;
+        font-weight: bold !important;
+        color: #00f2ea !important;
+    }
+    
+    .whatsapp-descripcion {
+        font-size: 11px !important;
+        color: #a0a0a0 !important;
+        font-style: italic;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -537,8 +550,8 @@ def main():
         st.image("https://img.icons8.com/color/96/0000/tiktok--v1.png", width=80)
     
     with col_titulo:
-        st.title(f"📊 Sistema de Consulta - Contrato {contrato}")
-        st.subheader(f"👤 {nombre}")
+        st.title(f"{contrato} - {nombre}")
+        st.caption("📊 Sistema de Consulta TikTok Live")
     
     with col_whatsapp:
         # Botón de WhatsApp
@@ -546,11 +559,11 @@ def main():
         st.markdown(f"""
             <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
                 <img src="https://img.icons8.com/color/48/000000/whatsapp--v1.png" class="whatsapp-icon"/>
-                <span>Soporte / Batallas</span>
+                <span>Contactar Soporte</span>
             </a>
         """, unsafe_allow_html=True)
-        st.caption("📞 +52 1 56 5984 2514")
-        st.caption("🏢 **Administración General**")
+        st.markdown('<p class="whatsapp-numero">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.markdown('<p class="whatsapp-descripcion">Dudas, aclaraciones y batallas • Administración General</p>', unsafe_allow_html=True)
     
     st.divider()
     
@@ -796,7 +809,7 @@ def main():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.caption(f"🔒 Vista privada para **{contrato}**")
+        st.caption(f"🔒 Vista privada: **{contrato} - {nombre}**")
     
     with col2:
         st.caption(f"📅 Periodo: **{periodo_seleccionado}**")
