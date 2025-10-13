@@ -368,6 +368,12 @@ def obtener_datos_contrato(contrato, fecha_datos):
         
         df.loc[df['cumple'] == 'NO', ['incentivo_coins', 'incentivo_paypal']] = 0
         
+        # Agregar columnas de sueldo base si no existen
+        if 'coins_bruto' not in df.columns:
+            df['coins_bruto'] = 0
+        if 'paypal_bruto' not in df.columns:
+            df['paypal_bruto'] = 0
+        
         return df
     
     return pd.DataFrame()
@@ -721,19 +727,73 @@ def mostrar_vista_agente(agente_data):
     
     st.divider()
     
-    tab1, tab2, tab3 = st.tabs(["👥 Todos", "✅ Cumplen", "📊 Resumen"])
+    tab1, tab2, tab3, tab4 = st.tabs(["👥 Todos", "✅ Cumplen", "📄 Notas del Periodo", "📊 Resumen"])
     
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
         
-        # MOSTRAR TODAS LAS COLUMNAS (sin ocultar)
-        columnas_mostrar = ['usuario', 'dias', 'duracion', 'diamantes', 'nivel', 'cumple', 
-                           'incentivo_coins', 'incentivo_paypal']
+        # MOSTRAR TODAS LAS COLUMNAS (vista completa agente)
+        columnas_mostrar = ['usuario', 'agencia', 'dias', 'duracion', 'diamantes', 
+                           'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal',
+                           'coins_bruto', 'paypal_bruto']
         
         df_show = df[[c for c in columnas_mostrar if c in df.columns]].copy()
         
-        st.dataframe(df_show.sort_values('diamantes', ascending=False), 
-                    use_container_width=True, hide_index=True, height=500)
+        # Renombrar columnas
+        nombres_columnas = {
+            'usuario': 'Usuario',
+            'agencia': 'Agencia',
+            'dias': 'Días',
+            'duracion': 'Horas',
+            'diamantes': 'Diamantes',
+            'nivel': 'Nivel',
+            'cumple': 'Cumple',
+            'incentivo_coins': 'Incentivo Coin',
+            'incentivo_paypal': 'Incentivo PayPal',
+            'coins_bruto': 'Sueldo Coin',
+            'paypal_bruto': 'Sueldo PayPal'
+        }
+        
+        df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
+        
+        # Formatear números
+        if 'Diamantes' in df_show.columns:
+            df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Incentivo Coin' in df_show.columns:
+            df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Incentivo PayPal' in df_show.columns:
+            df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+        
+        if 'Sueldo Coin' in df_show.columns:
+            df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Sueldo PayPal' in df_show.columns:
+            df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+        
+        # Configuración de columnas para hacerla más compacta
+        column_config = {
+            'Usuario': st.column_config.TextColumn('Usuario', width='medium'),
+            'Agencia': st.column_config.TextColumn('Agencia', width='small'),
+            'Días': st.column_config.NumberColumn('Días', width='small'),
+            'Horas': st.column_config.TextColumn('Horas', width='small'),
+            'Diamantes': st.column_config.TextColumn('Diamantes', width='medium'),
+            'Nivel': st.column_config.NumberColumn('Nivel', width='small'),
+            'Cumple': st.column_config.TextColumn('Cumple', width='small'),
+            'Incentivo Coin': st.column_config.TextColumn('Incentivo Coin', width='medium'),
+            'Incentivo PayPal': st.column_config.TextColumn('Incentivo PayPal', width='medium'),
+            'Sueldo Coin': st.column_config.TextColumn('Sueldo Coin', width='medium'),
+            'Sueldo PayPal': st.column_config.TextColumn('Sueldo PayPal', width='medium')
+        }
+        
+        st.dataframe(
+            df_show.sort_values('Diamantes', ascending=False), 
+            use_container_width=True, 
+            hide_index=True, 
+            height=500,
+            column_config=column_config
+        )
     
     with tab2:
         df_cumplen = df[df['cumple'] == 'SI']
@@ -741,10 +801,128 @@ def mostrar_vista_agente(agente_data):
         
         if not df_cumplen.empty:
             df_show = df_cumplen[[c for c in columnas_mostrar if c in df_cumplen.columns]].copy()
-            st.dataframe(df_show.sort_values('diamantes', ascending=False), 
-                        use_container_width=True, hide_index=True, height=500)
+            df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
+            
+            # Formatear igual que arriba
+            if 'Diamantes' in df_show.columns:
+                df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Incentivo Coin' in df_show.columns:
+                df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Incentivo PayPal' in df_show.columns:
+                df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+            if 'Sueldo Coin' in df_show.columns:
+                df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Sueldo PayPal' in df_show.columns:
+                df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+            
+            st.dataframe(
+                df_show.sort_values('Diamantes', ascending=False), 
+                use_container_width=True, 
+                hide_index=True, 
+                height=500,
+                column_config=column_config
+            )
     
     with tab3:
+        st.subheader("📄 Notas del Periodo")
+        st.caption(f"Contrato: {contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
+        
+        # Obtener notas del periodo desde reportes_contratos
+        supabase = get_supabase()
+        
+        try:
+            notas_resultado = supabase.table('reportes_contratos')\
+                .select('*')\
+                .eq('contrato', contrato)\
+                .eq('fecha_datos', periodo_seleccionado)\
+                .execute()
+            
+            if notas_resultado.data and len(notas_resultado.data) > 0:
+                df_notas = pd.DataFrame(notas_resultado.data)
+                
+                st.success(f"✅ {len(df_notas)} notas encontradas")
+                
+                # Mostrar información general
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_coins = df_notas['total_coins'].sum() if 'total_coins' in df_notas.columns else 0
+                    st.metric("💰 Total Coins", f"{int(total_coins):,}")
+                
+                with col2:
+                    total_paypal = df_notas['total_paypal'].sum() if 'total_paypal' in df_notas.columns else 0
+                    st.metric("💵 Total PayPal", f"${float(total_paypal):,.2f}")
+                
+                with col3:
+                    total_usuarios_nota = len(df_notas)
+                    st.metric("👥 Usuarios en Nota", total_usuarios_nota)
+                
+                st.divider()
+                
+                # Tabla de notas
+                st.markdown("### 📋 Detalle de Notas")
+                
+                # Seleccionar y renombrar columnas relevantes
+                columnas_notas = ['usuario', 'dias', 'horas', 'diamantes', 'nivel', 
+                                 'coins_bruto', 'paypal_bruto', 'incentivo_coins', 
+                                 'incentivo_paypal', 'total_coins', 'total_paypal']
+                
+                df_notas_show = df_notas[[c for c in columnas_notas if c in df_notas.columns]].copy()
+                
+                nombres_notas = {
+                    'usuario': 'Usuario',
+                    'dias': 'Días',
+                    'horas': 'Horas',
+                    'diamantes': 'Diamantes',
+                    'nivel': 'Nivel',
+                    'coins_bruto': 'Sueldo Coin',
+                    'paypal_bruto': 'Sueldo PayPal',
+                    'incentivo_coins': 'Incentivo Coin',
+                    'incentivo_paypal': 'Incentivo PayPal',
+                    'total_coins': 'Total Coin',
+                    'total_paypal': 'Total PayPal'
+                }
+                
+                df_notas_show = df_notas_show.rename(columns={k: v for k, v in nombres_notas.items() if k in df_notas_show.columns})
+                
+                # Formatear
+                if 'Diamantes' in df_notas_show.columns:
+                    df_notas_show['Diamantes'] = df_notas_show['Diamantes'].apply(lambda x: f"{int(x):,}")
+                if 'Sueldo Coin' in df_notas_show.columns:
+                    df_notas_show['Sueldo Coin'] = df_notas_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Incentivo Coin' in df_notas_show.columns:
+                    df_notas_show['Incentivo Coin'] = df_notas_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Total Coin' in df_notas_show.columns:
+                    df_notas_show['Total Coin'] = df_notas_show['Total Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Sueldo PayPal' in df_notas_show.columns:
+                    df_notas_show['Sueldo PayPal'] = df_notas_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Incentivo PayPal' in df_notas_show.columns:
+                    df_notas_show['Incentivo PayPal'] = df_notas_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Total PayPal' in df_notas_show.columns:
+                    df_notas_show['Total PayPal'] = df_notas_show['Total PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                
+                st.dataframe(df_notas_show, use_container_width=True, hide_index=True, height=500)
+                
+                # Botón de descarga
+                csv = df_notas.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Descargar Notas en CSV",
+                    data=csv,
+                    file_name=f"notas_{contrato}_{periodo_seleccionado}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("ℹ️ No hay notas generadas para este periodo aún")
+                st.markdown("""
+                Las notas se generan automáticamente al final de cada periodo.
+                Si el periodo ha cerrado y no ves notas, contacta al administrador.
+                """)
+        
+        except Exception as e:
+            st.error(f"❌ Error al cargar notas: {str(e)}")
+            st.info("Las notas estarán disponibles cuando se procese el cierre del periodo")
+    
+    with tab4:
         st.markdown("### 📈 Métricas")
         
         total = len(df)
