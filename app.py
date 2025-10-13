@@ -472,15 +472,20 @@ def mostrar_pantalla_publica():
         token_admin = st.text_input(
             "Token de Administrador:",
             type="password",
-            placeholder="ADMIN-xxxxx-xxxxx",
-            key="token_admin"
+            key="input_token_admin"
         )
         
         if st.button("🔓 Acceder como Administrador", key="btn_admin", use_container_width=True):
             if token_admin:
-                st.session_state['modo'] = 'admin'
-                st.session_state['token_admin'] = token_admin
-                st.rerun()
+                # Verificar token inmediatamente
+                token_data = verificar_token_admin(token_admin)
+                
+                if token_data:
+                    st.session_state['modo'] = 'admin'
+                    st.session_state['token_data'] = token_data
+                    st.rerun()
+                else:
+                    st.error("❌ Token de administrador inválido")
             else:
                 st.warning("⚠️ Por favor ingresa tu token")
     
@@ -503,23 +508,26 @@ def mostrar_pantalla_publica():
         
         usuario_agente = st.text_input(
             "Usuario:",
-            placeholder="A001",
-            key="usuario_agente"
+            key="input_usuario_agente"
         )
         
         password_agente = st.text_input(
             "Contraseña:",
             type="password",
-            placeholder="A001-2025",
-            key="password_agente"
+            key="input_password_agente"
         )
         
         if st.button("📊 Acceder como Agente", key="btn_agente", use_container_width=True):
             if usuario_agente and password_agente:
-                st.session_state['modo'] = 'agente_login'
-                st.session_state['usuario_agente'] = usuario_agente
-                st.session_state['password_agente'] = password_agente
-                st.rerun()
+                # Verificar login inmediatamente
+                agente_data = verificar_login_agente(usuario_agente, password_agente)
+                
+                if agente_data:
+                    st.session_state['modo'] = 'agente'
+                    st.session_state['agente_data'] = agente_data
+                    st.rerun()
+                else:
+                    st.error("❌ Usuario o contraseña incorrectos")
             else:
                 st.warning("⚠️ Por favor ingresa usuario y contraseña")
     
@@ -656,7 +664,10 @@ def mostrar_cambio_password(agente_data):
         else:
             if cambiar_password_agente(agente_data['usuario'], nueva_pass):
                 st.success("✅ Contraseña cambiada exitosamente")
-                st.session_state['password_agente'] = nueva_pass
+                # Actualizar agente_data con la nueva info
+                agente_data['password'] = nueva_pass
+                agente_data['cambio_password'] = True
+                st.session_state['agente_data'] = agente_data
                 st.balloons()
                 st.rerun()
             else:
@@ -965,21 +976,17 @@ def main():
     modo = st.session_state.get('modo')
     
     if modo == 'admin':
-        token_admin = st.session_state.get('token_admin')
-        token_data = verificar_token_admin(token_admin)
+        token_data = st.session_state.get('token_data')
         
         if token_data:
             mostrar_panel_admin(token_data)
         else:
-            st.error("❌ Token admin inválido")
+            st.error("❌ Sesión expirada")
             st.session_state.clear()
             st.rerun()
     
-    elif modo == 'agente_login':
-        usuario = st.session_state.get('usuario_agente')
-        password = st.session_state.get('password_agente')
-        
-        agente_data = verificar_login_agente(usuario, password)
+    elif modo == 'agente':
+        agente_data = st.session_state.get('agente_data')
         
         if agente_data:
             # Verificar si necesita cambiar contraseña
@@ -988,10 +995,9 @@ def main():
             else:
                 mostrar_vista_agente(agente_data)
         else:
-            st.error("❌ Usuario o contraseña incorrectos")
-            if st.button("← Volver"):
-                st.session_state.clear()
-                st.rerun()
+            st.error("❌ Sesión expirada")
+            st.session_state.clear()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
