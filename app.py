@@ -368,9 +368,7 @@ def obtener_datos_contrato(contrato, fecha_datos):
         
         df.loc[df['cumple'] == 'NO', ['incentivo_coins', 'incentivo_paypal']] = 0
         
-        # Agregar columnas de sueldo base si no existen
-        if 'coins_bruto' not in df.columns:
-            df['coins_bruto'] = 0
+        # Agregar columna de sueldo base si no existe
         if 'paypal_bruto' not in df.columns:
             df['paypal_bruto'] = 0
         
@@ -735,7 +733,7 @@ def mostrar_vista_agente(agente_data):
         # MOSTRAR TODAS LAS COLUMNAS (vista completa agente)
         columnas_mostrar = ['usuario', 'agencia', 'dias', 'duracion', 'diamantes', 
                            'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal',
-                           'coins_bruto', 'paypal_bruto']
+                           'paypal_bruto']
         
         df_show = df[[c for c in columnas_mostrar if c in df.columns]].copy()
         
@@ -750,7 +748,6 @@ def mostrar_vista_agente(agente_data):
             'cumple': 'Cumple',
             'incentivo_coins': 'Incentivo Coin',
             'incentivo_paypal': 'Incentivo PayPal',
-            'coins_bruto': 'Sueldo Coin',
             'paypal_bruto': 'Sueldo PayPal'
         }
         
@@ -766,9 +763,6 @@ def mostrar_vista_agente(agente_data):
         if 'Incentivo PayPal' in df_show.columns:
             df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
         
-        if 'Sueldo Coin' in df_show.columns:
-            df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
-        
         if 'Sueldo PayPal' in df_show.columns:
             df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
         
@@ -783,7 +777,6 @@ def mostrar_vista_agente(agente_data):
             'Cumple': st.column_config.TextColumn('Cumple', width='small'),
             'Incentivo Coin': st.column_config.TextColumn('Incentivo Coin', width='medium'),
             'Incentivo PayPal': st.column_config.TextColumn('Incentivo PayPal', width='medium'),
-            'Sueldo Coin': st.column_config.TextColumn('Sueldo Coin', width='medium'),
             'Sueldo PayPal': st.column_config.TextColumn('Sueldo PayPal', width='medium')
         }
         
@@ -810,8 +803,6 @@ def mostrar_vista_agente(agente_data):
                 df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
             if 'Incentivo PayPal' in df_show.columns:
                 df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
-            if 'Sueldo Coin' in df_show.columns:
-                df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
             if 'Sueldo PayPal' in df_show.columns:
                 df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
             
@@ -834,7 +825,7 @@ def mostrar_vista_agente(agente_data):
             notas_resultado = supabase.table('reportes_contratos')\
                 .select('*')\
                 .eq('contrato', contrato)\
-                .eq('fecha_datos', periodo_seleccionado)\
+                .eq('periodo', periodo_seleccionado)\
                 .execute()
             
             if notas_resultado.data and len(notas_resultado.data) > 0:
@@ -864,7 +855,7 @@ def mostrar_vista_agente(agente_data):
                 
                 # Seleccionar y renombrar columnas relevantes
                 columnas_notas = ['usuario', 'dias', 'horas', 'diamantes', 'nivel', 
-                                 'coins_bruto', 'paypal_bruto', 'incentivo_coins', 
+                                 'paypal_bruto', 'incentivo_coins', 
                                  'incentivo_paypal', 'total_coins', 'total_paypal']
                 
                 df_notas_show = df_notas[[c for c in columnas_notas if c in df_notas.columns]].copy()
@@ -875,7 +866,6 @@ def mostrar_vista_agente(agente_data):
                     'horas': 'Horas',
                     'diamantes': 'Diamantes',
                     'nivel': 'Nivel',
-                    'coins_bruto': 'Sueldo Coin',
                     'paypal_bruto': 'Sueldo PayPal',
                     'incentivo_coins': 'Incentivo Coin',
                     'incentivo_paypal': 'Incentivo PayPal',
@@ -888,8 +878,6 @@ def mostrar_vista_agente(agente_data):
                 # Formatear
                 if 'Diamantes' in df_notas_show.columns:
                     df_notas_show['Diamantes'] = df_notas_show['Diamantes'].apply(lambda x: f"{int(x):,}")
-                if 'Sueldo Coin' in df_notas_show.columns:
-                    df_notas_show['Sueldo Coin'] = df_notas_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}")
                 if 'Incentivo Coin' in df_notas_show.columns:
                     df_notas_show['Incentivo Coin'] = df_notas_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}")
                 if 'Total Coin' in df_notas_show.columns:
