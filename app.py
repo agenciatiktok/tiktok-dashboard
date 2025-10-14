@@ -1,6 +1,6 @@
 # ============================================================================
 # app.py - TikTok Live: Vista pública por token + login Admin/Agente
-# Basado en la lógica de tu app5, con ocultamiento de columnas desde BD.
+# Ocultamiento de columnas desde BD + estilos centrados/compactos
 # ============================================================================
 
 import os
@@ -14,24 +14,19 @@ import plotly.graph_objects as go
 # Setup
 # ----------------------------------------------------------------------------
 load_dotenv()
-
-st.set_page_config(
-    page_title="Sistema TikTok Live",
-    page_icon="📊",
-    layout="wide",
-)
+st.set_page_config(page_title="Sistema TikTok Live", page_icon="📊", layout="wide")
 
 # ----------------------------------------------------------------------------
-# Estilos (sin tocar tu lógica de negocio)
+# Estilos
 # ----------------------------------------------------------------------------
 st.markdown("""
 <style>
 :root { --tiktok-black:#000; --tiktok-cyan:#00f2ea; --tiktok-pink:#fe2c55; --tiktok-white:#fff; }
 .stApp{background:#000;}
 h1,h2,h3{color:var(--tiktok-cyan)!important;text-shadow:2px 2px 4px rgba(254,44,85,.3);}
-div[data-testid="stDataFrame"] td,div[data-testid="stDataFrame"] th{ text-align:center!important;}
+div[data-testid="stDataFrame"] td,div[data-testid="stDataFrame"] th{ text-align:center!important; }
 .stButton>button{background:linear-gradient(135deg,#00f2ea 0%,#fe2c55 100%);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:600;}
-.stButton>button:hover{filter:brightness(1.1);}
+.stButton>button:hover{filter:brightness(1.08);}
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,7 +47,7 @@ def get_supabase():
     return create_client(url, key)
 
 # ----------------------------------------------------------------------------
-# Auth (igual espíritu que app5)
+# Auth
 # ----------------------------------------------------------------------------
 def verificar_token_contrato(token: str):
     sb = get_supabase()
@@ -109,103 +104,78 @@ def calcular_incentivos(df_inc, diamantes, nivel):
     return (f.get(f"nivel_{nivel}_monedas", 0) or 0, f.get(f"nivel_{nivel}_paypal", 0) or 0)
 
 # ----------------------------------------------------------------------------
-# Ocultar columnas (como en app5: obtiene reglas de una tabla)
+# Reglas de ocultamiento (config en BD)
 # ----------------------------------------------------------------------------
 @st.cache_data(ttl=300)
 def _leer_reglas_ocultas():
     """
-    Lee config_columnas_ocultas:
-      - contrato (nullable) → reglas globales si es NULL
-      - columna (texto) → token ('coins','paypal','sueldo') o nombre real ('id', 'id_tiktok', etc.)
+    Lee reglas desde config_columnas_ocultas o config_tablas_ocultas:
+      - contrato (NULL = global), columna (token 'coins','paypal','sueldo' o nombre real)
+      - opcional: vista = 'publica'/'agente' (si no existe, aplica a ambas)
     """
     sb = get_supabase()
-    try:
-        r = sb.table("config_columnas_ocultas").select("*").execute()
-        return r.data or []
-    except Exception:
-        return []
+    tablas = ["config_columnas_ocultas", "config_tablas_ocultas"]
+    datos = []
+    for t in tablas:
+        try:
+            r = sb.table(t).select("*").execute()
+            if r.data: 
+                datos.extend(r.data)
+                break
+        except Exception:
+            continue
+    return datos
 
-def obtener_columnas_ocultas(contrato: str):
+def columnas_ocultas_para(contrato: str, vista: str):
     """
-    Devuelve lista de columnas a ocultar (tokens o nombres reales),
-    combinando reglas globales (contrato NULL) + específicas del contrato.
+    Devuelve set de columnas a ocultar para una vista ('publica'|'agente').
+    Aplica reglas globales (contrato NULL) + específicas; si la regla trae 'vista', se respeta.
+    Tokens aceptados: coins -> incentivo_coins, paypal -> incentivo_paypal, sueldo -> coins_bruto/paypal_bruto
     """
     reglas = _leer_reglas_ocultas()
-    ocultas = []
+    mapeo_tokens = {
+        'coins': ['incentivo_coins'],
+        'paypal': ['incentivo_paypal'],
+        'sueldo': ['coins_bruto', 'paypal_bruto'],
+    }
+    ocultas = set()
+
     for row in reglas:
-        c = row.get("contrato")
         col = str(row.get("columna", "")).strip()
-        if not col: continue
-        if c is None or str(c).strip() == "":
-            ocultas.append(col)          # global
-        elif str(c).strip() == str(contrato).strip():
-            ocultas.append(col)          # específica
+        if not col:
+            continue
+        c = row.get("contrato")
+        v = str(row.get("vista", "")).strip().lower() if row.get("vista") is not None else ""
+        # filtrar por vista (si se especifica)
+        if v and v not in ("publica", "agente"):  # ignora otras vistas
+            continue
+        if v and v != vista:
+            continue
+        # global o por contrato
+        match_global = (c is None) or (str(c).strip() == "")
+        match_contrato = (not match_global) and (str(c).strip() == str(contrato).strip())
+        if match_global or match_contrato:
+            key = col.lower()
+            if key in mapeo_tokens:
+                ocultas.update(mapeo_tokens[key])
+            else:
+                ocultas.add(col)
+
+    # defaults si no hay tabla o está vacía
+    if not reglas and vista == "publica":
+        ocultas.update(['agencia', 'id', 'id_tiktok', 'nivel_original', 'created_at', 'periodo_archivo', 'paypal_bruto'])
+    if not reglas and vista == "agente":
+        ocultas.update(['id', 'created_at', 'periodo_archivo'])
+
     return ocultas
 
-def formatear_dataframe(df_input: pd.DataFrame, contrato: str) -> pd.DataFrame:
-    """
-    Selecciona columnas visibles y aplica reglas de ocultamiento.
-    Tokens reconocidos: 'coins' → incentivo_coins,
-                        'paypal' → incentivo_paypal,
-                        'sueldo' → ['coins_bruto','paypal_bruto']
-    Además: si hay nombres reales en la config, también se ocultan.
-    """
-    # columnas visibles por defecto (como tu app5)
-    columnas_orden = [
-        'usuario', 'agencia', 'dias', 'duracion', 'diamantes',
-        'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal'
-    ]
-
-    # reglas de ocultamiento
-    mapeo_tokens = {
-        'coins': 'incentivo_coins',
-        'paypal': 'incentivo_paypal',
-        'sueldo': ['coins_bruto', 'paypal_bruto']
-    }
-    ocultas_cfg = set()
-    for item in obtener_columnas_ocultas(contrato):
-        key = item.lower()
-        if key in mapeo_tokens:
-            val = mapeo_tokens[key]
-            ocultas_cfg.update(val if isinstance(val, list) else [val])
-        else:
-            # nombre real
-            ocultas_cfg.add(item)
-
-    # si la tabla de config no existe / está vacía → defaults para vista pública
-    if not _leer_reglas_ocultas():
-        ocultas_cfg.update(['agencia'])  # suele ocultarse en pública
-
-    # columnas finales a mostrar, respetando orden
-    columnas_mostrar = [c for c in columnas_orden if c in df_input.columns and c not in ocultas_cfg]
-    df_show = df_input[columnas_mostrar].copy()
-
-    # renombres y formatos
-    ren = {
-        'usuario':'Usuario','agencia':'Agencia','dias':'Días','duracion':'Horas',
-        'diamantes':'Diamantes','nivel':'Nivel','cumple':'Cumple',
-        'incentivo_coins':'Incentivo Coin','incentivo_paypal':'Incentivo PayPal'
-    }
-    df_show.rename(columns={k:v for k,v in ren.items() if k in df_show.columns}, inplace=True)
-
-    if 'Diamantes' in df_show.columns:
-        df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
-    if 'Días' in df_show.columns:
-        df_show['Días'] = df_show['Días'].apply(lambda x: int(x) if pd.notnull(x) else 0)
-    if 'Incentivo Coin' in df_show.columns:
-        df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) and x>0 else "0")
-    if 'Incentivo PayPal' in df_show.columns:
-        df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) and x>0 else "$0.00")
-
-    return df_show
-
 # ----------------------------------------------------------------------------
-# Carga de datos del contrato (como en tu app original)
+# Carga de datos del contrato
 # ----------------------------------------------------------------------------
 def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
     sb = get_supabase()
 
-    # banderita nivel1_tabla3 en contratos
+    # flag nivel1_tabla3
     nivel1_tabla3 = False
     conf = sb.table("contratos").select("*").eq("codigo", contrato).execute()
     if conf.data:
@@ -215,20 +185,15 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
         else:
             nivel1_tabla3 = bool(v)
 
-    # usuarios del periodo
     r = (sb.table("usuarios_tiktok").select("*")
          .eq("contrato", contrato).eq("fecha_datos", fecha_datos).execute())
     if not r.data: return pd.DataFrame()
     df = pd.DataFrame(r.data)
 
-    # asegurar horas
     if "horas" not in df.columns: df["horas"] = 0
-
-    # nivel y cumple
     df["nivel_original"] = df.apply(lambda row: determinar_nivel(row.get("dias",0), row.get("horas",0)), axis=1)
     df["cumple"] = df["nivel_original"].apply(lambda n: "SI" if n>0 else "NO")
 
-    # incentivos
     inc = obtener_incentivos_df()
     if not inc.empty:
         def _calc(row):
@@ -241,7 +206,6 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
     else:
         df["incentivo_coins"] = 0; df["incentivo_paypal"] = 0; df["nivel"] = df["nivel_original"]
 
-    # si no cumple → cero incentivos
     df.loc[df["cumple"]=="NO", ["incentivo_coins","incentivo_paypal"]] = 0
 
     # sueldo (paypal_bruto) desde reportes_contratos (periodo)
@@ -261,6 +225,46 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
         df["paypal_bruto"] = 0
 
     return df
+
+# ----------------------------------------------------------------------------
+# Formateo de tabla (centrado/compacto)
+# ----------------------------------------------------------------------------
+def formatear_dataframe(df_input: pd.DataFrame, contrato: str, vista: str) -> "pd.io.formats.style.Styler":
+    """
+    - Selecciona columnas base en orden.
+    - Aplica reglas de ocultamiento por vista/contrato.
+    - Centra y formatea con Styler (para usar en st.dataframe).
+    """
+    base_cols = ['usuario','agencia','dias','duracion','diamantes','nivel','cumple','incentivo_coins','incentivo_paypal']
+    ocultas = columnas_ocultas_para(contrato, vista)
+    cols = [c for c in base_cols if c in df_input.columns and c not in ocultas]
+    if not cols:
+        cols = [c for c in df_input.columns if c not in ocultas]  # fallback
+
+    df = df_input[cols].copy()
+
+    # Renombres bonitos
+    ren = {'usuario':'Usuario','agencia':'Agencia','dias':'Días','duracion':'Horas',
+           'diamantes':'Diamantes','nivel':'Nivel','cumple':'Cumple',
+           'incentivo_coins':'Incentivo Coin','incentivo_paypal':'Incentivo PayPal'}
+    df.rename(columns={k:v for k,v in ren.items() if k in df.columns}, inplace=True)
+
+    # Formatos amigables
+    if 'Diamantes' in df.columns:
+        df['Diamantes'] = pd.to_numeric(df['Diamantes'], errors='coerce').fillna(0).astype(int).map(lambda x: f"{x:,}")
+    if 'Días' in df.columns:
+        df['Días'] = pd.to_numeric(df['Días'], errors='coerce').fillna(0).astype(int)
+    if 'Incentivo Coin' in df.columns:
+        df['Incentivo Coin'] = pd.to_numeric(df['Incentivo Coin'], errors='coerce').fillna(0).astype(int).map(lambda x: f"{x:,}")
+    if 'Incentivo PayPal' in df.columns:
+        df['Incentivo PayPal'] = pd.to_numeric(df['Incentivo PayPal'], errors='coerce').fillna(0).map(lambda x: f"${x:,.2f}")
+
+    # Styler: centrar, quitar index y compactar
+    styler = (df.style
+              .set_properties(**{'text-align': 'center'})
+              .set_table_styles([{'selector':'th','props':[('text-align','center')] }])
+             )
+    return styler
 
 # ----------------------------------------------------------------------------
 # Gráfico
@@ -300,20 +304,20 @@ def vista_publica_contrato(token_data: dict):
 
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
-        st.dataframe(formatear_dataframe(df.sort_values("diamantes", ascending=False), contrato),
-                     use_container_width=True)
+        st.dataframe(formatear_dataframe(df.sort_values("diamantes", ascending=False), contrato, "publica"),
+                     use_container_width=True, hide_index=True)
 
     with tab2:
         df_ok = df[df["cumple"]=="SI"].copy()
         st.caption(f"✅ Cumplen: {len(df_ok)}")
-        st.dataframe(formatear_dataframe(df_ok.sort_values("diamantes", ascending=False), contrato),
-                     use_container_width=True)
+        st.dataframe(formatear_dataframe(df_ok.sort_values("diamantes", ascending=False), contrato, "publica"),
+                     use_container_width=True, hide_index=True)
 
     with tab3:
         df_no = df[df["cumple"]=="NO"].copy()
         st.caption(f"❌ No cumplen: {len(df_no)}")
-        st.dataframe(formatear_dataframe(df_no.sort_values("diamantes", ascending=False), contrato),
-                     use_container_width=True)
+        st.dataframe(formatear_dataframe(df_no.sort_values("diamantes", ascending=False), contrato, "publica"),
+                     use_container_width=True, hide_index=True)
 
     with tab4:
         st.plotly_chart(grafico_niveles(df), use_container_width=True)
@@ -321,7 +325,6 @@ def vista_publica_contrato(token_data: dict):
 def pantalla_login():
     st.title("🎵 Sistema de Gestión TikTok Live")
     col1, col2 = st.columns(2)
-
     with col1:
         st.subheader("🔐 Administración")
         token_admin = st.text_input("Token de Administrador", type="password", key="token_admin")
@@ -333,7 +336,6 @@ def pantalla_login():
                 st.rerun()
             else:
                 st.error("Token inválido")
-
     with col2:
         st.subheader("👔 Agente")
         user = st.text_input("Usuario", key="u_agente")
@@ -349,14 +351,14 @@ def pantalla_login():
 
 def panel_admin():
     st.title("🔐 Panel de Administración")
-    st.info("Placeholder de administración (sin romper el flujo).")
+    st.info("Placeholder de administración.")
 
 def panel_agente():
     st.title("👔 Panel del Agente")
-    st.info("Placeholder del agente (puedes reusar las tablas formateadas si quieres).")
+    st.info("Placeholder del agente.")
 
 # ----------------------------------------------------------------------------
-# Router principal (como en app5)
+# Router principal
 # ----------------------------------------------------------------------------
 def main():
     # 1) Token en URL → vista pública del contrato
@@ -366,18 +368,14 @@ def main():
     if token_url:
         td = verificar_token_contrato(token_url)
         if td:
-            vista_publica_contrato(td)
-            return
+            vista_publica_contrato(td); return
         else:
-            st.error("❌ Token inválido o inactivo.")
-            st.stop()
+            st.error("❌ Token inválido o inactivo."); st.stop()
 
-    # 2) Si ya hay sesión (admin/agente)
+    # 2) Sesión (admin/agente)
     modo = st.session_state.get("modo")
-    if modo == "admin":
-        panel_admin(); return
-    if modo == "agente":
-        panel_agente(); return
+    if modo == "admin": panel_admin(); return
+    if modo == "agente": panel_agente(); return
 
     # 3) Pantalla pública con logins
     pantalla_login()
