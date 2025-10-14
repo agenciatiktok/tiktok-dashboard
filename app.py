@@ -1,27 +1,54 @@
 # app.py
 import os
 import re
-import math
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# ==========================================
-# Config básica
-# ==========================================
+# =========================
+# Config de página
+# =========================
 st.set_page_config(page_title="Sistema TikTok Live", layout="wide")
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+# =========================
+# Credenciales Supabase
+# - Funciona en local (.env) y en Streamlit Cloud (st.secrets)
+# =========================
+load_dotenv()  # en Cloud no afecta; en local lee .env
+
+def _pick(*vals):
+    for v in vals:
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s
+    return ""
+
+# URL siempre requerida
+SUPABASE_URL = _pick(
+    st.secrets.get("SUPABASE_URL") if hasattr(st, "secrets") else None,
+    os.getenv("SUPABASE_URL")
+)
+
+# Prefiere SERVICE_KEY; cae a anon si no hay
+SUPABASE_KEY = _pick(
+    (st.secrets.get("SUPABASE_SERVICE_KEY") if hasattr(st, "secrets") else None),
+    os.getenv("SUPABASE_SERVICE_KEY"),
+    (st.secrets.get("SUPABASE_KEY") if hasattr(st, "secrets") else None),
+    os.getenv("SUPABASE_KEY")
+)
+
 if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("Faltan SUPABASE_URL o SUPABASE_KEY en variables de entorno.")
+    st.error("Faltan credenciales de Supabase. Define SUPABASE_URL y SUPABASE_SERVICE_KEY (o SUPABASE_KEY).")
     st.stop()
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# ==========================================
-# Utilidades seguras
-# ==========================================
+# =========================
+# Helpers de tipos y reglas
+# =========================
 def _to_int(x, default=0):
     try:
         if x is None: return default
@@ -63,24 +90,18 @@ def parse_horas(duracion_txt):
 def nivel_from(dias, horas):
     return 1 if (dias >= 7 and horas >= 15) else 0
 
-# ==========================================
-# Consultas Supabase (capas finas)
-# ==========================================
+# =========================
+# Consultas cacheadas
+# =========================
 @st.cache_data(ttl=300)
 def get_periodos():
-    res = supabase.table("usuarios_tiktok") \
-        .select("fecha_datos") \
-        .order("fecha_datos", desc=True) \
-        .execute()
+    res = supabase.table("usuarios_tiktok").select("fecha_datos").order("fecha_datos", desc=True).execute()
     fechas = sorted({r["fecha_datos"] for r in (res.data or [])}, reverse=True)
     return fechas
 
 @st.cache_data(ttl=300)
 def get_contratos_activos():
-    res = supabase.table("contratos") \
-        .select("*") \
-        .eq("estado", "Activo") \
-        .execute()
+    res = supabase.table("contratos").select("*").eq("estado", "Activo").execute()
     df = pd.DataFrame(res.data or [])
     if df.empty:
         return pd.DataFrame(columns=["codigo", "nombre", "tipo_logica"])
@@ -90,64 +111,55 @@ def get_contratos_activos():
 
 @st.cache_data(ttl=300)
 def get_tokens_activos():
-    res = supabase.table("contratos_tokens") \
-        .select("contrato,nombre,activo") \
-        .eq("activo", True) \
-        .execute()
+    res = supabase.table("contratos_tokens").select("contrato,nombre,activo").eq("activo", True).execute()
     return pd.DataFrame(res.data or [])
 
 @st.cache_data(ttl=300)
 def fetch_usuarios(periodo: str):
-    res = supabase.table("usuarios_tiktok") \
-        .select("*") \
-        .eq("fecha_datos", periodo) \
-        .execute()
+    res = supabase.table("usuarios_tiktok").select("*").eq("fecha_datos", periodo).execute()
     df = pd.DataFrame(res.data or [])
     if df.empty:
         return df
-    # Normaliza columnas esperadas
+
+    # Normaliza columnas
     if "dias" not in df.columns and "Dias" in df.columns:
         df["dias"] = df["Dias"]
     if "duracion" not in df.columns and "Duracion" in df.columns:
         df["duracion"] = df["Duracion"]
-    # Horas preferente numérico; si no, parsea desde duracion
     if "horas" not in df.columns:
         df["horas"] = None
+
+    # Horas preferente numérico; si no, parsea desde 'duracion'
     df["horas"] = df.apply(
         lambda r: _to_float(r.get("horas")) if _to_float(r.get("horas")) > 0
         else parse_horas(r.get("duracion")),
         axis=1
     )
     df["dias"] = df["dias"].apply(_to_int)
-    # Si no viene nivel/cumple, calcúlalo
+
+    # Nivel/cumple si faltan
     if "nivel" not in df.columns:
         df["nivel"] = df.apply(lambda r: nivel_from(_to_int(r["dias"]), _to_float(r["horas"])), axis=1)
     if "cumple" not in df.columns:
         df["cumple"] = df["nivel"].apply(lambda n: True if n > 0 else False)
-    # Tipos
+
     for c in ("diamantes", "nivel", "dias"):
         if c in df.columns:
             df[c] = df[c].apply(_to_int)
+
     df["cumple"] = df["cumple"].astype(bool)
-    # Etiqueta SI/NO amigable
     df["cumple_str"] = df["cumple"].apply(lambda x: "SI" if x else "NO")
-    # Usuario id universal
     if "id_tiktok" not in df.columns:
-        df["id_tiktok"] = df.get("usuario_id")  # fallback improbable
+        df["id_tiktok"] = df.get("usuario_id")
     return df
 
 @st.cache_data(ttl=300)
 def fetch_reportes(periodo: str, contrato: str):
-    # reportes_contratos usa columna "periodo" (no "fecha_datos")
-    res = supabase.table("reportes_contratos") \
-        .select("*") \
-        .eq("periodo", periodo) \
-        .eq("contrato", contrato) \
-        .execute()
+    # reportes_contratos usa 'periodo' (no 'fecha_datos')
+    res = supabase.table("reportes_contratos").select("*").eq("periodo", periodo).eq("contrato", contrato).execute()
     df = pd.DataFrame(res.data or [])
     if df.empty:
         return df
-    # Normaliza tipos
     for c in ("paypal_bruto", "paypal_incentivo", "coins_bruto", "coins_incentivo"):
         if c in df.columns:
             df[c] = df[c].apply(_to_float)
@@ -155,14 +167,13 @@ def fetch_reportes(periodo: str, contrato: str):
         df["usuario_id"] = df["id_tiktok"]
     return df
 
-# ==========================================
-# Lógica de combinación y métricas
-# ==========================================
+# =========================
+# Combinación y métricas
+# =========================
 def combinar_usuarios_y_reportes(df_users: pd.DataFrame, df_rep: pd.DataFrame):
     if df_users.empty:
         return df_users
     df = df_users.copy()
-    # Algunas cargas guardan id en "usuario_id" en reportes
     if not df_rep.empty:
         rep = df_rep[["usuario_id", "paypal_bruto", "paypal_incentivo", "coins_bruto", "coins_incentivo"]].copy()
         rep.rename(columns={"usuario_id": "id_tiktok"}, inplace=True)
@@ -170,11 +181,9 @@ def combinar_usuarios_y_reportes(df_users: pd.DataFrame, df_rep: pd.DataFrame):
     else:
         for c in ("paypal_bruto", "paypal_incentivo", "coins_bruto", "coins_incentivo"):
             df[c] = 0.0
-    # Asegura columnas clave
     for c in ("usuario", "contrato", "agencia", "agente", "duracion"):
         if c not in df.columns:
             df[c] = ""
-    # Orden útil
     if "diamantes" in df.columns:
         df = df.sort_values("diamantes", ascending=False)
     return df
@@ -191,10 +200,17 @@ def cuadro_metricas(df: pd.DataFrame):
     c3.metric("Diamantes (total)", f"{diamantes_total:,}")
     c4.metric("Sueldo PayPal (total)", f"${sueldo_total:,.2f}")
 
-# ==========================================
+# =========================
 # UI
-# ==========================================
+# =========================
 st.title("🧮 Sistema TikTok Live · Dashboard")
+
+# Botón de refresco duro
+col_refresh, _ = st.columns([1, 6])
+with col_refresh:
+    if st.button("🔄 Actualizar ahora"):
+        st.cache_data.clear()
+        st.rerun()
 
 periodos = get_periodos()
 if not periodos:
@@ -207,13 +223,11 @@ with colA:
 with colB:
     contratos_df = get_contratos_activos()
     tokens_df = get_tokens_activos()
-    # Catálogo visible: intenta mostrar nombre si hay token, si no el de contratos
     opciones = []
     if not contratos_df.empty:
         for _, r in contratos_df.iterrows():
             codigo = r["codigo"]
             nombre = r["nombre"]
-            # Si existe token con alias, úsalo como etiqueta secundaria
             alias = tokens_df.loc[tokens_df["contrato"] == codigo, "nombre"]
             etiqueta = f"{codigo} – {alias.iloc[0]}" if not alias.empty else f"{codigo} – {nombre}"
             opciones.append((etiqueta, codigo))
@@ -224,16 +238,14 @@ with colB:
 
 st.divider()
 
-# Datos
 with st.spinner("Cargando usuarios del periodo…"):
     df_users = fetch_usuarios(periodo_sel)
 
 with st.spinner("Cargando reportes/notas del periodo…"):
     df_rep = fetch_reportes(periodo_sel, contrato_sel)
 
-df = combinar_usuarios_y_reportes(df_users[df_users["contrato"].str.upper() == contrato_sel], df_rep)
+df = combinar_usuarios_y_reportes(df_users[df_users["contrato"].astype(str).str.upper() == contrato_sel], df_rep)
 
-# Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["👥 Todos", "✅ Cumplen", "📄 Notas del Periodo", "📊 Resumen"])
 
 with tab1:
@@ -244,7 +256,7 @@ with tab1:
         view_cols = ["usuario", "id_tiktok", "contrato", "diamantes", "dias", "horas", "nivel", "cumple_str", "paypal_bruto", "duracion", "agencia", "agente"]
         view_cols = [c for c in view_cols if c in df.columns]
         st.dataframe(df[view_cols], use_container_width=True, hide_index=True)
-    st.caption("Sueldo PayPal proviene de la tabla reportes_contratos para el periodo seleccionado.")
+    st.caption("Sueldo PayPal proviene de 'reportes_contratos' para el periodo seleccionado.")
 
 with tab2:
     st.markdown("### ✅ Solo quienes cumplen (≥7 días y ≥15h)")
