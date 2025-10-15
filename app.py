@@ -1,7 +1,7 @@
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
-# Build: 2025-10-15a - Integrado con mejoras de enriquecimiento de nombres
+# Build: 2025-10-15b - FINAL con todas las correcciones
 # ============================================================================
 
 import streamlit as st
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-15a")
+st.sidebar.caption("🔧 Build: 2025-10-15b")
 
 # ============================================================================
 # ESTILOS CSS
@@ -599,7 +599,7 @@ def mostrar_pantalla_publica():
     
     **¿Qué puedo hacer aquí?**
     - 🔐 Administradores: Acceso completo al sistema
-    - 👔 Agentes: Gestión de contratos y usuarios
+    - 👔 Agentes: Gestión de usuarios y reportes
     - 🎮 Jugadores: Consulta tu desempeño (requiere token)
     
     **¿Cómo accedo?**
@@ -759,7 +759,7 @@ def mostrar_vista_agente(agente_data):
     
     with col_titulo:
         st.title(f"👔 Panel del Agente")
-        st.caption(f"Contrato: {contrato}")
+        st.caption(f"{contrato}")  # ✅ SIN "Contrato:"
     
     st.divider()
     
@@ -882,7 +882,7 @@ def mostrar_vista_agente(agente_data):
     
     with tab3:
         st.subheader("📄 Notas del Periodo")
-        st.caption(f"Contrato: {contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
+        st.caption(f"{contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")  # ✅ SIN "Contrato:"
         
         st.info("""
         📝 **Sobre las Notas**
@@ -1032,7 +1032,8 @@ def mostrar_vista_jugadores(token_data):
                 <span>💬 Soporte</span>
             </a>
         """, unsafe_allow_html=True)
-        st.markdown('<p style="color:#00f2ea;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#00f2ea; font-size:14px; margin-top:5px;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#fe2c55; font-size:12px; font-weight:600; margin-top:8px;">DUDAS, COMENTARIOS, QUEJAS<br>Chatea con la administración general</p>', unsafe_allow_html=True)
     
     st.divider()
     
