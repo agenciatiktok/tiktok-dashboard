@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-# app_chat1_fixed_full.py — Vista pública filtrada + ocultamiento robusto + enriquecimiento de nombres
+# app.py — Vista pública filtrada + ocultamiento robusto + enriquecimiento de nombres
+# build: 2025-10-14d
+
 import os
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 
-# Carga .env si existe (no romper si no está)
+# Carga .env si existe (no rompe si no está instalado)
 try:
     from dotenv import load_dotenv  # type: ignore
     load_dotenv()
@@ -13,15 +15,36 @@ except Exception:
     pass
 
 st.set_page_config(page_title="Sistema TikTok Live", page_icon="📊", layout="wide")
+st.caption("build: 2025-10-14d")
 
-# ---- Estilos UI ----
+# =============================== Estilos UI ==================================
 st.markdown("""
 <style>
 :root{--tiktok-black:#000;--tiktok-cyan:#00f2ea;--tiktok-pink:#fe2c55;--tiktok-white:#fff;}
 .stApp{background:#000;}
 h1,h2,h3{color:var(--tiktok-cyan)!important;text-shadow:2px 2px 4px rgba(254,44,85,.3);}
-div[data-testid="stDataFrame"] td,div[data-testid="stDataFrame"] th{ text-align:center!important;}
-.stButton>button{background:linear-gradient(135deg,#00f2ea 0%,#fe2c55 100%);color:#fff;border:none;padding:10px 18px;border-radius:10px;font-weight:600;}
+
+/* Compactar y centrar tablas (AG Grid y HTML) */
+div[data-testid="stDataFrame"] table { font-size: 13px; }
+div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th{
+  padding: 6px 8px !important; text-align:center !important;
+}
+
+/* Tabla HTML centrada */
+.table-centered thead th{
+  text-align:center; background:#0F0F0F; color:#fff; font-weight:600;
+  position:sticky; top:0; z-index:1;
+}
+.table-centered td{ text-align:center; white-space:nowrap; padding:6px 10px; }
+.table-centered{ width:100%; border-collapse:separate; border-spacing:0; border-radius:8px; overflow:hidden; }
+.table-centered td, .table-centered th{ border:1px solid #222; }
+.table-centered tr:nth-child(even){ background:#111214; }
+.table-centered tr:nth-child(odd){ background:#0A0B0D; }
+
+.stButton>button{
+  background:linear-gradient(135deg,#00f2ea 0%,#fe2c55 100%);color:#fff;border:none;
+  padding:10px 18px;border-radius:10px;font-weight:600;
+}
 .stButton>button:hover{filter:brightness(1.1);}
 </style>
 """, unsafe_allow_html=True)
@@ -29,7 +52,7 @@ div[data-testid="stDataFrame"] td,div[data-testid="stDataFrame"] th{ text-align:
 # =========================== Supabase helpers ================================
 @st.cache_resource
 def get_supabase():
-    """Devuelve cliente de Supabase o None con mensaje de error amigable."""
+    """Devuelve cliente de Supabase o None con mensaje en UI (no crashea)."""
     try:
         from supabase import create_client  # type: ignore
     except Exception:
@@ -46,7 +69,6 @@ def get_supabase():
 
     url = _get_secret("SUPABASE_URL")
     key = _get_secret("SUPABASE_SERVICE_KEY") or _get_secret("SUPABASE_KEY")
-
     if not url or not key:
         st.error("❌ Faltan credenciales de Supabase. Define `SUPABASE_URL` y `SUPABASE_SERVICE_KEY` (o `SUPABASE_KEY`) en Secrets.")
         return None
@@ -142,7 +164,6 @@ def _leer_reglas_ocultas():
     except Exception:
         return []
 
-# --------- Normalización/aliases para columnas a ocultar ----------
 def _alias_oculto(col_raw: str) -> str:
     alias = {
         # base visibles
@@ -168,16 +189,14 @@ def obtener_columnas_ocultas(contrato: str):
         if not col_raw:
             continue
         col = _alias_oculto(col_raw)
-        # Global o específica por contrato
         if (c is None) or (str(c).strip() == "") or (str(c).strip() == str(contrato).strip()):
             ocultas.append(col)
     return ocultas
 
-# ---- Enriquecimiento de nombres desde histórico (cuando usuario está vacío)
-def _col(df, *candidatos):
-    for c in candidatos:
-        if c in df.columns:
-            return c
+# --------- Helpers para enriquecer nombres desde histórico ----------
+def _col(df, *cands):
+    for c in cands:
+        if c in df.columns: return c
     return None
 
 def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
@@ -185,7 +204,7 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
     Rellena 'usuario' cuando viene vacío usando historico_usuarios.
     Busca por id_tiktok (o usuario_id) y usa el último username conocido.
     """
-    if df.empty or sb is None:
+    if df.empty or sb is None: 
         return df
 
     col_user = _col(df, "usuario", "username", "user", "nick")
@@ -193,8 +212,8 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
     if not col_user or not col_id:
         return df
 
-    mask_faltan = df[col_user].isna() | (df[col_user].astype(str).str.strip() == "")
-    ids = (df.loc[mask_faltan, col_id].dropna().astype(str).unique().tolist())
+    mask = df[col_user].isna() | (df[col_user].astype(str).str.strip() == "")
+    ids = df.loc[mask, col_id].dropna().astype(str).unique().tolist()
     if not ids:
         return df
 
@@ -202,8 +221,9 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
     CHUNK = 400
     for i in range(0, len(ids), CHUNK):
         lote = ids[i:i+CHUNK]
+
         rows = []
-        # Intento 1: id_tiktok
+        # intento por id_tiktok
         try:
             r = (sb.table("historico_usuarios")
                     .select("*")
@@ -213,7 +233,7 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
             rows = r.data or []
         except Exception:
             rows = []
-        # Intento 2: usuario_id
+        # intento por usuario_id
         if not rows:
             try:
                 r = (sb.table("historico_usuarios")
@@ -225,40 +245,59 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
             except Exception:
                 rows = []
 
-        if not rows:
+        if not rows: 
             continue
 
         h = pd.DataFrame(rows)
-        col_hist_id   = _col(h, "id_tiktok", "usuario_id", "user_id")
-        col_hist_user = _col(h, "usuario", "username", "user", "nick")
-        if not col_hist_id or not col_hist_user:
+        hid = _col(h, "id_tiktok", "usuario_id", "user_id")
+        hun = _col(h, "usuario", "username", "user", "nick")
+        if not hid or not hun:
             continue
 
-        h["id_str"] = h[col_hist_id].astype(str)
-        h = h.dropna(subset=[col_hist_user]).drop_duplicates(subset=["id_str"], keep="first")
-        mapping.update(dict(zip(h["id_str"], h[col_hist_user])))
+        h["id_str"] = h[hid].astype(str)
+        h = h.dropna(subset=[hun]).drop_duplicates(subset=["id_str"], keep="first")
+        mapping.update(dict(zip(h["id_str"], h[hun])))
 
     if mapping:
         df[col_id] = df[col_id].astype(str)
-        df.loc[mask_faltan, col_user] = df.loc[mask_faltan, col_id].map(mapping).fillna(df.loc[mask_faltan, col_user])
+        df.loc[mask, col_user] = df.loc[mask, col_id].map(mapping).fillna(df.loc[mask, col_user])
 
     return df
 
 # =========================== Tablas / Formato ================================
+def tabla_html_centrada(df: pd.DataFrame) -> str:
+    """Devuelve HTML de tabla con estilos centrados/compactos."""
+    return (
+        df.style
+          .hide(axis="index")
+          .set_table_styles([
+              {"selector":"table", "props":[("class","table-centered")]},
+          ])
+          .to_html()
+          .replace('<table ', '<table class="table-centered" ')
+    )
+
 def formatear_dataframe(df_input: pd.DataFrame, contrato: str, *, ocultar_publico: bool=False) -> pd.DataFrame:
     columnas_orden = [
         'usuario', 'agencia', 'dias', 'duracion', 'diamantes',
         'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal',
         'coins_bruto', 'paypal_bruto'
     ]
-    # Cargar reglas y normalizarlas a minúsculas
-    ocultas_cfg = {c.lower() for c in obtener_columnas_ocultas(contrato)}
-    if ocultar_publico:
-        ocultas_cfg.update({"agencia"})  # 👉 Forzar ocultar agencia en vista pública
 
+    # 1) Reglas de ocultamiento (minúsculas)
+    ocultas_cfg = {c.lower() for c in obtener_columnas_ocultas(contrato)}
+
+    # 2) Forzar oculto público
+    if ocultar_publico:
+        ocultas_cfg.update({'agencia'})  # forzado en público
+        if 'agencia' in df_input.columns:
+            df_input = df_input.drop(columns=['agencia'])
+
+    # 3) Columnas a mostrar
     columnas_mostrar = [c for c in columnas_orden if c in df_input.columns and c.lower() not in ocultas_cfg]
     df_show = df_input[columnas_mostrar].copy()
 
+    # 4) Renombres bonitos
     ren = {
         'usuario':'Usuario','agencia':'Agencia','dias':'Días','duracion':'Horas',
         'diamantes':'Diamantes','nivel':'Nivel','cumple':'Cumple',
@@ -267,6 +306,7 @@ def formatear_dataframe(df_input: pd.DataFrame, contrato: str, *, ocultar_public
     }
     df_show.rename(columns={k:v for k,v in ren.items() if k in df_show.columns}, inplace=True)
 
+    # 5) Formatos
     if 'Horas' in df_show.columns and 'duracion' in df_input.columns:
         df_show['Horas'] = df_input['duracion'].apply(lambda m: m if isinstance(m, str) else f"{int(m//60)}h {int(m%60)}min")
     if 'Diamantes' in df_show.columns and 'diamantes' in df_input.columns:
@@ -278,12 +318,18 @@ def formatear_dataframe(df_input: pd.DataFrame, contrato: str, *, ocultar_public
     if 'Incentivo PayPal' in df_show.columns and 'incentivo_paypal' in df_input.columns:
         df_show['Incentivo PayPal'] = df_input['incentivo_paypal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) and x>0 else "$0.00")
 
+    # 6) Cierre de seguridad
+    if ocultar_publico:
+        for c in list(df_show.columns):
+            if c.lower() == 'agencia':
+                df_show.drop(columns=[c], inplace=True, errors='ignore')
+
     return df_show
 
 # ======================== Carga y cálculo del contrato =======================
 def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
-    """Carga usuarios del periodo y FILTRA estrictamente por contrato/agencia.
-    Enriquecer nombres, calcular nivel/cumple e incentivos, mapear paypal_bruto.
+    """Carga usuarios del periodo, FILTRA estricto por contrato/agencia,
+    enriquece nombres, calcula nivel/incentivos y mapea paypal_bruto.
     """
     sb = get_supabase()
     if not sb: return pd.DataFrame()
@@ -308,7 +354,6 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
     except Exception as e:
         st.error(f"Error leyendo usuarios del periodo: {e}")
         return pd.DataFrame()
-
     if not r.data:
         return pd.DataFrame()
 
@@ -328,7 +373,6 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
 
     # Normalizar horas si vienen en minutos numéricos
     if "horas" in df.columns and "duracion" not in df.columns:
-        # Si ya tienes minutos en "horas", adapta aquí. Por defecto, duracion = horas*60
         try:
             df["duracion"] = (pd.to_numeric(df["horas"], errors="coerce") * 60).fillna(0)
         except Exception:
@@ -342,7 +386,6 @@ def obtener_datos_contrato(contrato: str, fecha_datos: str) -> pd.DataFrame:
     if dias_col and horas_col:
         df["nivel_original"] = df.apply(lambda row: determinar_nivel(row.get(dias_col,0), row.get(horas_col,0)), axis=1)
     else:
-        # fallback de seguridad
         df["nivel_original"] = df.apply(lambda row: determinar_nivel(row.get("dias",0), row.get("duracion",0)/60.0), axis=1)
     df["cumple"] = df["nivel_original"].apply(lambda n: "SI" if n>0 else "NO")
 
@@ -400,6 +443,22 @@ def vista_publica_contrato(token_data: dict):
     st.session_state["contrato_actual"] = contrato
     st.title(f"📄 Contrato {contrato} – Vista pública")
 
+    # Encabezado con datos de la agencia (nombre + whatsapp)
+    try:
+        sb = get_supabase()
+        rowc = (sb.table("contratos")
+                  .select("*")
+                  .eq("codigo", contrato)
+                  .limit(1)
+                  .execute())
+        if rowc.data:
+            c = rowc.data[0]
+            nombre_agencia = c.get("nombre_agencia") or c.get("nombre") or f"Contrato {contrato}"
+            whatsapp = c.get("whatsapp") or c.get("telefono") or c.get("soporte") or ""
+            st.caption(f"**Agencia:** {nombre_agencia}" + (f" · **WhatsApp:** {whatsapp}" if whatsapp else ""))
+    except Exception:
+        pass
+
     periodos = obtener_periodos_disponibles()
     if not periodos:
         st.warning("Sin datos disponibles.")
@@ -412,28 +471,37 @@ def vista_publica_contrato(token_data: dict):
         return
 
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Todos", "✅ Cumplen", "❌ No cumplen", "📊 Resumen"])
+
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
-        st.dataframe(
-            formatear_dataframe(df.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True),
-            use_container_width=True
+        html = tabla_html_centrada(
+            formatear_dataframe(df.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True)
         )
+        st.markdown(html, unsafe_allow_html=True)
+
     with tab2:
         df_ok = df[df["cumple"]=="SI"].copy()
         st.caption(f"✅ Cumplen: {len(df_ok)}")
-        st.dataframe(
-            formatear_dataframe(df_ok.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True),
-            use_container_width=True
+        html = tabla_html_centrada(
+            formatear_dataframe(df_ok.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True)
         )
+        st.markdown(html, unsafe_allow_html=True)
+
     with tab3:
         df_no = df[df["cumple"]=="NO"].copy()
         st.caption(f"❌ No cumplen: {len(df_no)}")
-        st.dataframe(
-            formatear_dataframe(df_no.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True),
-            use_container_width=True
+        html = tabla_html_centrada(
+            formatear_dataframe(df_no.sort_values("diamantes", ascending=False), contrato, ocultar_publico=True)
         )
+        st.markdown(html, unsafe_allow_html=True)
+
     with tab4:
         st.plotly_chart(grafico_niveles(df), use_container_width=True)
+        st.info(
+            "ℹ️ **Pagos e incentivos**: si este periodo aún no cumples los mínimos, "
+            "tu incentivo no se pierde; se acumula y se liquida cuando alcances el requisito. "
+            "Para dudas de pago, escribe al WhatsApp de tu agencia."
+        )
 
 def pantalla_login():
     st.title("🎵 Sistema de Gestión TikTok Live")
@@ -454,7 +522,7 @@ def pantalla_login():
         user = st.text_input("Usuario", key="u_agente")
         pwd = st.text_input("Contraseña", type="password", key="p_agente")
         if st.button("Acceder como Agente"):
-            ag = verificar_login_agete(user, pwd) if (user and pwd) else None  # (puedes conectar tu vista de agente)
+            ag = verificar_login_agente(user, pwd) if (user and pwd) else None
             if ag:
                 st.session_state["modo"] = "agente"
                 st.session_state["agente"] = ag
