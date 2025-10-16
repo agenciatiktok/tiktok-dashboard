@@ -42,11 +42,10 @@ st.markdown("""
     }
     
     .stMetric {
-        background: #111 !important;
-        border: 1px solid #222 !important;
+        background: linear-gradient(135deg, var(--tiktok-cyan) 0%, var(--tiktok-pink) 100%);
         padding: 15px;
         border-radius: 10px;
-        color: var(--tiktok-white) !important;
+        color: var(--tiktok-white);
     }
     
     .stMetric label {
@@ -944,6 +943,7 @@ def mostrar_vista_agente(agente_data):
             st.info("Las notas estarán disponibles cuando se ejecuten los scripts de cierre del periodo (09-20)")
     
     with tab4:
+        pass
     
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
