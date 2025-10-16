@@ -1137,19 +1137,10 @@ def mostrar_vista_jugadores(token_data):
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Construir URL con el token
-        token_actual = token_data['token']
-        # En producción: https://tu-app.streamlit.app/📅_Registro_Eventos?token=...
-        # En local: http://localhost:8501/📅_Registro_Eventos?token=...
-        url_formulario = f"📅_Registro_Eventos?token={token_actual}"
-        
-        st.markdown(f"""
-        <center>
-        <a href="{url_formulario}" target="_self" class="evento-button">
-            📅 REGISTRAR EVENTO/BATALLA
-        </a>
-        </center>
-        """, unsafe_allow_html=True)
+        # Guardar token en query params para la página de eventos
+        if st.button("📅 REGISTRAR EVENTO/BATALLA", use_container_width=True, type="primary"):
+            st.query_params["token"] = token_data['token']
+            st.switch_page("pages/1_📅_Registro_Eventos.py")
     
     st.caption("Registra batallas, eventos y subastas fácilmente")
     
