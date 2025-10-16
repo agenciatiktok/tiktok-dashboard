@@ -1137,10 +1137,12 @@ def mostrar_vista_jugadores(token_data):
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Guardar token en query params para la página de eventos
-        if st.button("📅 REGISTRAR EVENTO/BATALLA", use_container_width=True, type="primary"):
-            st.query_params["token"] = token_data['token']
-            st.switch_page("pages/1_📅_Registro_Eventos.py")
+        # Usar page_link que funciona mejor en Cloud
+        st.page_link(
+            "pages/1_📅_Registro_Eventos.py",
+            label="📅 REGISTRAR EVENTO/BATALLA",
+            icon="📅"
+        )
     
     st.caption("Registra batallas, eventos y subastas fácilmente")
     
