@@ -1,5 +1,3 @@
-/mnt/user-data/outputs/app.py
-
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
