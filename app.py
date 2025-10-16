@@ -1,7 +1,6 @@
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
-# Build: 2025-10-15c - FINAL con Notas consolidadas
 # ============================================================================
 
 import streamlit as st
@@ -25,9 +24,6 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-15c")
-
 # ============================================================================
 # ESTILOS CSS
 # ============================================================================
@@ -46,10 +42,11 @@ st.markdown("""
     }
     
     .stMetric {
-        background: linear-gradient(135deg, var(--tiktok-cyan) 0%, var(--tiktok-pink) 100%);
+        background: #111 !important;
+        border: 1px solid #222 !important;
         padding: 15px;
         border-radius: 10px;
-        color: var(--tiktok-white);
+        color: var(--tiktok-white) !important;
     }
     
     .stMetric label {
@@ -71,12 +68,6 @@ st.markdown("""
     div[data-testid="stDataFrame"] td,
     div[data-testid="stDataFrame"] th {
         text-align: center !important;
-    }
-    
-    /* Centrado forzado AG Grid */
-    .ag-cell, .ag-header-cell {
-        text-align: center !important;
-        justify-content: center !important;
     }
     
     hr {
@@ -121,13 +112,6 @@ st.markdown("""
     
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
-    }
-    
-    /* Tablas centradas y compactas */
-    div[data-testid="stDataFrame"] table { font-size: 13px; }
-    div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th{
-        padding: 6px 8px !important; 
-        text-align:center !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -272,183 +256,29 @@ def determinar_nivel(dias, horas):
     return 0
 
 def calcular_incentivos(df_incentivos, diamantes, nivel):
-    """Calcula incentivos según tabla horizontal"""
-    if nivel == 0:
+    """Calcula incentivo"""
+    if nivel == 0 or diamantes <= 0:
         return (0, 0)
     
-    try:
-        fila_valida = None
-        for idx, row in df_incentivos.iterrows():
-            if diamantes >= row.get('acumulado', 0):
-                fila_valida = idx
-            else:
-                break
-        
-        if fila_valida is None:
-            return (0, 0)
-        
-        fila = df_incentivos.iloc[fila_valida]
-        coins = fila.get(f'nivel_{nivel}_monedas', 0)
-        paypal = fila.get(f'nivel_{nivel}_paypal', 0)
-        
-        return (coins, paypal)
-    except Exception:
+    fila = df_incentivos[df_incentivos['acumulado'] <= diamantes].sort_values('acumulado', ascending=False)
+    
+    if fila.empty:
         return (0, 0)
-
-# ============================================================================
-# NUEVAS FUNCIONES INTEGRADAS DE CHATGPT
-# ============================================================================
-
-def _col(df, *cands):
-    """Helper para encontrar columna con diferentes nombres posibles"""
-    for c in cands:
-        if c in df.columns: 
-            return c
-    return None
-
-def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
-    """
-    INTEGRADO DE CHATGPT - MEJORADO
-    Rellena 'usuario' cuando viene vacío usando historico_usuarios.
-    Busca por id_tiktok (o usuario_id) y usa el último username conocido.
-    Procesa en lotes de 400 para no sobrecargar Supabase.
-    """
-    if df.empty or sb is None: 
-        return df
-
-    col_user = _col(df, "usuario", "username", "user", "nick")
-    col_id   = _col(df, "id_tiktok", "usuario_id", "user_id", "id_usuario")
-    if not col_user or not col_id:
-        return df
-
-    # Identificar usuarios sin nombre
-    mask = df[col_user].isna() | (df[col_user].astype(str).str.strip() == "")
-    ids = df.loc[mask, col_id].dropna().astype(str).unique().tolist()
-    if not ids:
-        return df
-
-    mapping = {}
-    CHUNK = 400  # Procesar en lotes de 400
     
-    for i in range(0, len(ids), CHUNK):
-        lote = ids[i:i+CHUNK]
-        rows = []
-        
-        # Intento 1: Por id_tiktok
-        try:
-            r = (sb.table("historico_usuarios")
-                    .select("*")
-                    .in_("id_tiktok", lote)
-                    .order("visto_ultima_vez", desc=True)
-                    .execute())
-            rows = r.data or []
-        except Exception:
-            rows = []
-        
-        # Intento 2: Por usuario_id si no funcionó
-        if not rows:
-            try:
-                r = (sb.table("historico_usuarios")
-                        .select("*")
-                        .in_("usuario_id", lote)
-                        .order("visto_ultima_vez", desc=True)
-                        .execute())
-                rows = r.data or []
-            except Exception:
-                rows = []
-
-        if not rows: 
-            continue
-
-        # Mapear IDs a nombres
-        h = pd.DataFrame(rows)
-        hid = _col(h, "id_tiktok", "usuario_id", "user_id")
-        hun = _col(h, "usuario_1", "usuario_2", "usuario_3", "usuario", "username", "user", "nick")
-        
-        if not hid or not hun:
-            continue
-
-        h["id_str"] = h[hid].astype(str)
-        h = h.dropna(subset=[hun]).drop_duplicates(subset=["id_str"], keep="first")
-        mapping.update(dict(zip(h["id_str"], h[hun])))
-
-    # Aplicar mapeo
-    if mapping:
-        df[col_id] = df[col_id].astype(str)
-        df.loc[mask, col_user] = df.loc[mask, col_id].map(mapping).fillna(df.loc[mask, col_user])
-
-    return df
-
-def _alias_oculto(col_raw: str) -> str:
-    """
-    INTEGRADO DE CHATGPT
-    Normaliza nombres de columnas para sistema de ocultamiento.
-    Acepta múltiples variaciones.
-    """
-    alias = {
-        # Base visibles
-        "usuario":"usuario","username":"usuario","user":"usuario","nick":"usuario",
-        "agencia":"agencia","agency":"agencia","Agencia":"agencia","AGENCIA":"agencia",
-        "dias":"dias","días":"dias","Dias":"dias","Días":"dias",
-        "duracion":"duracion","horas":"duracion","tiempo":"duracion",
-        "diamantes":"diamantes",
-        "nivel":"nivel","cumple":"cumple",
-        # Incentivos/pagos
-        "coins":"incentivo_coins","incentivo coin":"incentivo_coins","incentivo_coins":"incentivo_coins",
-        "paypal":"incentivo_paypal","incentivo paypal":"incentivo_paypal","incentivo_paypal":"incentivo_paypal",
-        "sueldo":"paypal_bruto","paypal_bruto":"paypal_bruto","coins_bruto":"coins_bruto",
-    }
-    return alias.get(col_raw.lower(), col_raw.lower())
-
-@st.cache_data(ttl=300)
-def _leer_reglas_ocultas():
-    """Lee reglas de columnas ocultas desde Supabase"""
-    sb = get_supabase()
-    if not sb: 
-        return []
-    try:
-        r = sb.table("config_columnas_ocultas").select("*").execute()
-        return r.data or []
-    except Exception:
-        return []
-
-def obtener_columnas_ocultas(contrato: str):
-    """
-    MEJORADO CON ALIAS
-    Obtiene columnas ocultas con normalización de nombres
-    """
-    reglas = _leer_reglas_ocultas()
-    ocultas = []
+    fila = fila.iloc[0]
     
-    for row in reglas:
-        c = row.get("contrato")
-        col_raw = str(row.get("columna", "")).strip()
-        
-        if not col_raw:
-            continue
-        
-        col = _alias_oculto(col_raw)
-        
-        # Aplica si es global (contrato=None) o específico
-        if (c is None) or (str(c).strip() == "") or (str(c).strip() == str(contrato).strip()):
-            ocultas.append(col)
+    col_coins = f'nivel_{nivel}_monedas'
+    col_paypal = f'nivel_{nivel}_paypal'
     
-    return ocultas
-
-# ============================================================================
-# FUNCIONES DE DATOS
-# ============================================================================
+    incentivo_coins = fila.get(col_coins, 0) if col_coins in fila else 0
+    incentivo_paypal = fila.get(col_paypal, 0) if col_paypal in fila else 0
+    
+    return (incentivo_coins, incentivo_paypal)
 
 def obtener_datos_contrato(contrato, fecha_datos):
-    """
-    MEJORADO CON ENRIQUECIMIENTO
-    Obtiene datos del contrato desde usuarios_tiktok, 
-    enriquece nombres desde histórico,
-    y mapea paypal_bruto desde reportes_contratos
-    """
+    """Obtiene datos del contrato desde usuarios_tiktok y paypal_bruto desde reportes_contratos"""
     supabase = get_supabase()
     
-    # Verificar nivel1_tabla3
     config_resultado = supabase.table('contratos').select('*').eq('codigo', contrato).execute()
     
     nivel1_tabla3 = False
@@ -469,18 +299,52 @@ def obtener_datos_contrato(contrato, fecha_datos):
     if resultado.data:
         df = pd.DataFrame(resultado.data)
         
-        # ✨ NUEVO: Enriquecer nombres desde histórico (INTEGRADO DE CHATGPT)
-        df = enriquecer_nombres_desde_historial(df, supabase)
+        # Resolver usuarios sin nombre desde histórico
+        mask_sin_nombre = df['usuario'].isna() | (df['usuario'] == '') | (df['usuario'].str.strip() == '')
+        usuarios_sin_nombre = df[mask_sin_nombre]
         
-        # Normalizar horas
+        if not usuarios_sin_nombre.empty:
+            ids_sin_nombre = usuarios_sin_nombre['id_tiktok'].astype(str).unique().tolist()
+            
+            try:
+                historico = supabase.table('historico_usuarios')\
+                    .select('id_tiktok, usuario_1, usuario_2, usuario_3')\
+                    .in_('id_tiktok', ids_sin_nombre)\
+                    .execute()
+                
+                if historico.data:
+                    nombres_historico = {}
+                    for registro in historico.data:
+                        id_tiktok = str(registro['id_tiktok'])
+                        nombre = None
+                        for col in ['usuario_1', 'Usuario_1', 'usuario_2', 'Usuario_2', 'usuario_3', 'Usuario_3']:
+                            valor = registro.get(col, '')
+                            if valor and str(valor).strip() and str(valor).strip().lower() not in ['', 'nan', 'none', 'null']:
+                                nombre = str(valor).strip()
+                                break
+                        
+                        if nombre:
+                            nombres_historico[id_tiktok] = nombre
+                        else:
+                            nombres_historico[id_tiktok] = f"Usuario_{id_tiktok[:8]}"
+                    
+                    def obtener_nombre(row):
+                        if pd.isna(row['usuario']) or str(row['usuario']).strip() == '':
+                            id_str = str(row['id_tiktok'])
+                            return nombres_historico.get(id_str, f"Usuario_{id_str[:8]}")
+                        return row['usuario']
+                    
+                    df['usuario'] = df.apply(obtener_nombre, axis=1)
+            
+            except Exception as e:
+                pass
+        
         if 'horas' not in df.columns:
             df['horas'] = 0
         
-        # Calcular nivel y cumplimiento
         df['nivel_original'] = df.apply(lambda r: determinar_nivel(r.get('dias', 0), r.get('horas', 0)), axis=1)
         df['cumple'] = df['nivel_original'].apply(lambda n: 'SI' if n > 0 else 'NO')
         
-        # Calcular incentivos
         df_incentivos = obtener_incentivos()
         
         if not df_incentivos.empty:
@@ -505,10 +369,9 @@ def obtener_datos_contrato(contrato, fecha_datos):
             df['incentivo_paypal'] = 0
             df['nivel'] = df['nivel_original']
         
-        # Limpiar valores para no cumplen
         df.loc[df['cumple'] == 'NO', ['incentivo_coins', 'incentivo_paypal']] = 0
         
-        # ✨ OBTENER paypal_bruto desde reportes_contratos
+        # OBTENER paypal_bruto desde reportes_contratos
         try:
             reportes = supabase.table('reportes_contratos')\
                 .select('usuario_id, paypal_bruto')\
@@ -518,261 +381,350 @@ def obtener_datos_contrato(contrato, fecha_datos):
             
             if reportes.data:
                 df_reportes = pd.DataFrame(reportes.data)
+                # Crear mapeo de id_tiktok -> paypal_bruto
                 df['id_tiktok_str'] = df['id_tiktok'].astype(str)
                 df_reportes['usuario_id_str'] = df_reportes['usuario_id'].astype(str)
                 
                 paypal_map = dict(zip(df_reportes['usuario_id_str'], df_reportes['paypal_bruto']))
                 
+                # Aplicar valores de reportes
                 df['paypal_bruto'] = df['id_tiktok_str'].map(paypal_map).fillna(0)
                 df = df.drop('id_tiktok_str', axis=1)
             else:
                 df['paypal_bruto'] = 0
-        except Exception:
+        except Exception as e:
             df['paypal_bruto'] = 0
         
         return df
     
     return pd.DataFrame()
 
-# ============================================================================
-# GRÁFICOS
-# ============================================================================
-
 def crear_grafico_pastel(nivel_counts):
-    """Crea gráfico de pastel para niveles"""
+    """Crea gráfico de pastel"""
     labels = []
     values = []
     colors = []
     
-    nivel_map = {
-        3: ('🥇 Nivel 3', '#FFD700'),
-        2: ('🥈 Nivel 2', '#C0C0C0'),
-        1: ('🥉 Nivel 1', '#CD7F32'),
-        0: ('⚫ Nivel 0', '#404040')
-    }
+    if nivel_counts.get(3, 0) > 0:
+        labels.append('🥇 Nivel 3')
+        values.append(nivel_counts.get(3, 0))
+        colors.append('#FFD700')
     
-    for nivel in sorted(nivel_counts.index, reverse=True):
-        if nivel in nivel_map:
-            labels.append(nivel_map[nivel][0])
-            values.append(nivel_counts[nivel])
-            colors.append(nivel_map[nivel][1])
+    if nivel_counts.get(2, 0) > 0:
+        labels.append('🥈 Nivel 2')
+        values.append(nivel_counts.get(2, 0))
+        colors.append('#C0C0C0')
+    
+    if nivel_counts.get(1, 0) > 0:
+        labels.append('🥉 Nivel 1')
+        values.append(nivel_counts.get(1, 0))
+        colors.append('#CD7F32')
+    
+    if nivel_counts.get(0, 0) > 0:
+        labels.append('⚫ Nivel 0')
+        values.append(nivel_counts.get(0, 0))
+        colors.append('#6c757d')
     
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
-        hole=.4,
-        marker=dict(colors=colors)
+        marker=dict(colors=colors, line=dict(color='#000000', width=2)),
+        textinfo='label+percent+value',
+        textfont=dict(size=14, color='white'),
+        hole=0.4
     )])
     
     fig.update_layout(
+        showlegend=True,
         height=400,
-        margin=dict(l=20, r=20, t=20, b=20),
         paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white', size=14)
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#00f2ea', size=12),
+        margin=dict(l=20, r=20, t=40, b=20)
     )
     
     return fig
 
 # ============================================================================
-# MODO 1: PANTALLA PÚBLICA (sin login)
+# MODO 1: PANTALLA PÚBLICA
 # ============================================================================
 
 def mostrar_pantalla_publica():
-    """Pantalla pública con información general"""
+    """Pantalla inicial pública con 2 botones de login"""
     
-    col_logo, col_titulo, col_whatsapp = st.columns([1, 3, 2])
+    col_logo, col_titulo = st.columns([1, 4])
     
     with col_logo:
         st.image("https://img.icons8.com/color/96/000000/tiktok--v1.png", width=100)
     
     with col_titulo:
-        st.title("🎵 Sistema TikTok Live")
-        st.caption("📊 Plataforma de Gestión de Streamers")
-    
-    with col_whatsapp:
-        whatsapp_url = "https://wa.me/5215659842514"
-        st.markdown(f"""
-            <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
-                <span>💬 Contacto</span>
-            </a>
-        """, unsafe_allow_html=True)
-        st.markdown('<p style="color:#00f2ea;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.title("🎵 Sistema de Gestión TikTok Live")
+        st.markdown("### Bienvenido al sistema de consultas")
     
     st.divider()
     
-    st.info("""
-    ### 👋 Bienvenido al Sistema TikTok Live
+    st.markdown("""
+    ### 📊 Acerca del Sistema
     
-    **¿Qué puedo hacer aquí?**
-    - 🔐 Administradores: Acceso completo al sistema
-    - 👔 Agentes: Gestión de usuarios y reportes
-    - 🎮 Jugadores: Consulta tu desempeño (requiere token)
+    Este sistema permite consultar:
+    - 📈 Métricas de rendimiento
+    - 💎 Estadísticas de diamantes
+    - 🎯 Niveles de cumplimiento
+    - 💰 Incentivos calculados
     
-    **¿Cómo accedo?**
-    - Si eres **jugador**, tu agente te proporcionará un enlace directo
-    - Si eres **agente**, usa el login de agente
-    - Si eres **administrador**, usa el token de acceso
-    
-    **💬 ¿Necesitas ayuda?**
-    Contacta por WhatsApp usando el botón de arriba
+    ---
     """)
     
-    st.divider()
+    st.markdown("### 🔐 Opciones de Acceso")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🔐 Acceso Administración")
-        token_admin = st.text_input("Token de Administrador", type="password", key="token_admin_input")
-        if st.button("Acceder como Admin", key="btn_admin"):
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 30px; border-radius: 15px; text-align: center;'>
+            <h2 style='color: white; margin: 0;'>🔐 ADMINISTRACIÓN</h2>
+            <p style='color: white; margin: 10px 0;'>Acceso completo al sistema</p>
+            <ul style='color: white; text-align: left; padding-left: 20px;'>
+                <li>Ver todos los contratos</li>
+                <li>Buscar cualquier usuario</li>
+                <li>Dashboard global</li>
+                <li>Consultas personalizadas</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        token_admin = st.text_input(
+            "Token de Administrador:",
+            type="password",
+            key="input_token_admin"
+        )
+        
+        if st.button("🔓 Acceder como Administrador", key="btn_admin", use_container_width=True):
             if token_admin:
+                # Verificar token inmediatamente
                 token_data = verificar_token_admin(token_admin)
+                
                 if token_data:
                     st.session_state['modo'] = 'admin'
                     st.session_state['token_data'] = token_data
-                    st.success("✅ Acceso concedido")
                     st.rerun()
                 else:
-                    st.error("❌ Token inválido")
+                    st.error("❌ Token de administrador inválido")
             else:
-                st.warning("⚠️ Ingresa un token")
+                st.warning("⚠️ Por favor ingresa tu token")
     
     with col2:
-        st.subheader("👔 Acceso Agentes")
-        usuario = st.text_input("Usuario", key="usuario_agente_input")
-        password = st.text_input("Contraseña", type="password", key="password_agente_input")
-        if st.button("Acceder como Agente", key="btn_agente"):
-            if usuario and password:
-                agente_data = verificar_login_agente(usuario, password)
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #00f2ea 0%, #fe2c55 100%); 
+                    padding: 30px; border-radius: 15px; text-align: center;'>
+            <h2 style='color: white; margin: 0;'>👔 AGENTE</h2>
+            <p style='color: white; margin: 10px 0;'>Gestión de tu contrato</p>
+            <ul style='color: white; text-align: left; padding-left: 20px;'>
+                <li>Ver todos tus usuarios</li>
+                <li>Consultar métricas completas</li>
+                <li>Revisar incentivos</li>
+                <li>Descargar reportes</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        usuario_agente = st.text_input(
+            "Usuario:",
+            key="input_usuario_agente"
+        )
+        
+        password_agente = st.text_input(
+            "Contraseña:",
+            type="password",
+            key="input_password_agente"
+        )
+        
+        if st.button("📊 Acceder como Agente", key="btn_agente", use_container_width=True):
+            if usuario_agente and password_agente:
+                # Verificar login inmediatamente
+                agente_data = verificar_login_agente(usuario_agente, password_agente)
+                
                 if agente_data:
                     st.session_state['modo'] = 'agente'
                     st.session_state['agente_data'] = agente_data
-                    st.success("✅ Acceso concedido")
                     st.rerun()
                 else:
                     st.error("❌ Usuario o contraseña incorrectos")
             else:
-                st.warning("⚠️ Completa todos los campos")
-
-# ============================================================================
-# MODO 2: PANEL ADMIN
-# ============================================================================
-
-def mostrar_panel_admin(token_data):
-    """Panel de administración completo"""
-    
-    st.sidebar.title("🔐 Panel Admin")
-    st.sidebar.success(f"✅ Sesión: {token_data.get('nombre', 'Admin')}")
-    
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state.clear()
-        st.rerun()
-    
-    st.title("🔐 Panel de Administración")
-    
-    tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "👥 Usuarios", "⚙️ Configuración"])
-    
-    with tab1:
-        st.subheader("📈 Métricas Generales")
-        
-        periodos = obtener_periodos_disponibles()
-        if periodos:
-            periodo_actual = periodos[0]
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("📅 Periodo Actual", obtener_mes_español(periodo_actual))
-            
-            with col2:
-                st.metric("📊 Periodos Disponibles", len(periodos))
-            
-            with col3:
-                st.metric("✅ Sistema", "Operativo")
-        
-        st.divider()
-        st.info("💡 Dashboard completo - En desarrollo")
-    
-    with tab2:
-        st.subheader("👥 Gestión de Usuarios")
-        st.info("💡 Gestión de usuarios - En desarrollo")
-    
-    with tab3:
-        st.subheader("⚙️ Configuración del Sistema")
-        st.info("💡 Configuración - En desarrollo")
-
-# ============================================================================
-# MODO 3: PANEL AGENTE
-# ============================================================================
-
-def mostrar_cambio_password(agente_data):
-    """Forzar cambio de contraseña en primer login"""
-    st.title("🔐 Cambio de Contraseña Obligatorio")
-    
-    st.warning("""
-    ⚠️ **Acción requerida**
-    
-    Por seguridad, debes cambiar tu contraseña antes de continuar.
-    """)
+                st.warning("⚠️ Por favor ingresa usuario y contraseña")
     
     st.divider()
     
-    usuario = agente_data['usuario']
-    
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        nueva_password = st.text_input("Nueva Contraseña", type="password", key="nueva_pwd")
+        st.caption("🔒 Acceso seguro")
     
     with col2:
-        confirmar_password = st.text_input("Confirmar Contraseña", type="password", key="conf_pwd")
+        st.caption("📊 Datos en tiempo real")
     
-    if st.button("💾 Cambiar Contraseña"):
-        if not nueva_password or not confirmar_password:
-            st.error("❌ Completa todos los campos")
-        elif nueva_password != confirmar_password:
+    with col3:
+        st.caption(f"🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
+# ============================================================================
+# MODO 2: PANEL ADMINISTRACIÓN
+# ============================================================================
+
+def mostrar_panel_admin(token_data):
+    """Panel de administración"""
+    
+    supabase = get_supabase()
+    
+    st.title("🔐 Panel de Administración")
+    st.markdown(f"**Administrador:** {token_data.get('nombre', 'Super Admin')}")
+    
+    if st.button("← Cerrar Sesión"):
+        st.session_state.clear()
+        st.rerun()
+    
+    st.divider()
+    
+    with st.sidebar:
+        st.header("🛠️ Herramientas")
+        
+        opcion = st.radio(
+            "Selecciona:",
+            [
+                "🔍 Buscar Usuario",
+                "📊 Dashboard Global",
+                "📋 Ver Contratos"
+            ]
+        )
+    
+    if opcion == "🔍 Buscar Usuario":
+        st.header("🔍 Buscar Usuario")
+        
+        tab1, tab2 = st.tabs(["Por Nombre", "Por ID"])
+        
+        with tab1:
+            nombre = st.text_input("Nombre:", placeholder="user123")
+            
+            if st.button("🔍 Buscar"):
+                if nombre:
+                    resultado = supabase.table("usuarios_tiktok")\
+                        .select("*")\
+                        .ilike("usuario", f"%{nombre}%")\
+                        .execute()
+                    
+                    if resultado.data:
+                        st.success(f"✅ {len(resultado.data)} resultado(s)")
+                        st.dataframe(pd.DataFrame(resultado.data))
+                    else:
+                        st.warning("❌ No encontrado")
+        
+        with tab2:
+            user_id = st.text_input("ID TikTok:", placeholder="7123...")
+            
+            if st.button("🔍 Buscar ID"):
+                if user_id:
+                    resultado = supabase.table("usuarios_tiktok")\
+                        .select("*")\
+                        .eq("id_tiktok", user_id)\
+                        .execute()
+                    
+                    if resultado.data:
+                        st.success("✅ Encontrado")
+                        st.dataframe(pd.DataFrame(resultado.data))
+                    else:
+                        st.warning("❌ No encontrado")
+    
+    elif opcion == "📊 Dashboard Global":
+        st.header("📊 Dashboard Global")
+        
+        usuarios = supabase.table("usuarios_tiktok").select("*", count="exact").execute()
+        total_usuarios = usuarios.count if usuarios.count else 0
+        
+        cumplen = supabase.table("usuarios_tiktok")\
+            .select("*", count="exact")\
+            .eq("cumple", "SI")\
+            .execute()
+        total_cumplen = cumplen.count if cumplen.count else 0
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric("👥 Total Usuarios", f"{total_usuarios:,}")
+        
+        with col2:
+            st.metric("✅ Cumplen", f"{total_cumplen:,}")
+    
+    elif opcion == "📋 Ver Contratos":
+        st.header("📋 Contratos")
+        
+        resultado = supabase.table("contratos").select("*").order("codigo").execute()
+        
+        if resultado.data:
+            st.dataframe(pd.DataFrame(resultado.data))
+
+# ============================================================================
+# MODO 3: VISTA AGENTE (con cambio de contraseña)
+# ============================================================================
+
+def mostrar_cambio_password(agente_data):
+    """Pantalla de cambio de contraseña obligatorio"""
+    
+    st.title("🔒 Cambio de Contraseña Obligatorio")
+    st.warning("⚠️ Es tu primera vez. Debes cambiar tu contraseña.")
+    
+    st.info(f"**Usuario:** {agente_data['usuario']}")
+    
+    nueva_pass = st.text_input("Nueva contraseña:", type="password", key="nueva_pass")
+    confirma_pass = st.text_input("Confirmar contraseña:", type="password", key="confirma_pass")
+    
+    if st.button("💾 Guardar Nueva Contraseña"):
+        if not nueva_pass or not confirma_pass:
+            st.error("❌ Completa ambos campos")
+        elif nueva_pass != confirma_pass:
             st.error("❌ Las contraseñas no coinciden")
-        elif len(nueva_password) < 6:
-            st.error("❌ La contraseña debe tener al menos 6 caracteres")
+        elif len(nueva_pass) < 4:
+            st.error("❌ La contraseña debe tener al menos 4 caracteres")
         else:
-            if cambiar_password_agente(usuario, nueva_password):
-                st.success("✅ Contraseña actualizada correctamente")
-                # Actualizar datos en sesión
+            if cambiar_password_agente(agente_data['usuario'], nueva_pass):
+                st.success("✅ Contraseña cambiada exitosamente")
+                # Actualizar agente_data con la nueva info
+                agente_data['password'] = nueva_pass
                 agente_data['cambio_password'] = True
-                agente_data['password'] = nueva_password
                 st.session_state['agente_data'] = agente_data
+                st.balloons()
                 st.rerun()
             else:
                 st.error("❌ Error al cambiar contraseña")
 
 def mostrar_vista_agente(agente_data):
-    """Vista completa del agente con TODOS los datos"""
+    """Vista completa para el agente"""
     
-    st.sidebar.title("👔 Panel Agente")
-    st.sidebar.success(f"✅ {agente_data['usuario']}")
-    st.sidebar.caption(f"📧 {agente_data.get('email', 'N/A')}")
+    contrato = agente_data['contrato']
     
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state.clear()
-        st.rerun()
-    
-    contrato = agente_data.get('contrato', 'N/A')
-    
-    col_logo, col_titulo = st.columns([1, 4])
+    col_logo, col_titulo, col_cerrar = st.columns([1, 3, 1])
     
     with col_logo:
         st.image("https://img.icons8.com/color/96/000000/tiktok--v1.png", width=80)
     
     with col_titulo:
-        st.title(f"👔 Panel del Agente")
-        st.caption(f"{contrato}")
+        st.title(f"👔 {contrato} - Panel de Agente")
+        st.caption(f"Gestión Completa")
+    
+    with col_cerrar:
+        if st.button("🚪 Cerrar Sesión"):
+            st.session_state.clear()
+            st.rerun()
     
     st.divider()
     
     periodos = obtener_periodos_disponibles()
     
     if not periodos:
-        st.warning("⚠️ No hay datos disponibles")
+        st.warning("⚠️ No hay datos")
         st.stop()
     
     col1, col2 = st.columns([2, 2])
@@ -781,18 +733,17 @@ def mostrar_vista_agente(agente_data):
         periodo_seleccionado = st.selectbox(
             "📅 Periodo:",
             periodos,
-            format_func=formatear_fecha_español,
-            key="periodo_agente"
+            format_func=formatear_fecha_español
         )
     
     with col2:
         st.metric("📆 Periodo", obtener_mes_español(periodo_seleccionado))
     
-    with st.spinner('📄 Cargando datos...'):
+    with st.spinner('📄 Cargando...'):
         df = obtener_datos_contrato(contrato, periodo_seleccionado)
     
     if df.empty:
-        st.info(f"ℹ️ Sin datos para el periodo {obtener_mes_español(periodo_seleccionado)}")
+        st.info(f"ℹ️ Sin datos para {periodo_seleccionado}")
         st.stop()
     
     st.divider()
@@ -888,84 +839,304 @@ def mostrar_vista_agente(agente_data):
     
     with tab3:
         st.subheader("📄 Notas del Periodo")
-        st.caption(f"{contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
+        st.caption(f"Contrato: {contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
         
         st.info("""
         📝 **Sobre las Notas**
         
-        Las notas muestran el **total consolidado** a pagar por el periodo.
-        Se generan automáticamente mediante los scripts Python 09-20.
+        Las notas se generan automáticamente al cierre del periodo mediante los scripts Python 09-20.
+        
+        Cada nota contiene el detalle completo de pagos: sueldo base + incentivos por usuario.
         """)
         
+        # Obtener notas del periodo desde reportes_contratos
         supabase = get_supabase()
         
         try:
-            # Obtener TODOS los registros del contrato/periodo para sumar
             notas_resultado = supabase.table('reportes_contratos')\
-                .select('paypal_bruto, coins_incentivo, paypal_incentivo')\
+                .select('*')\
                 .eq('contrato', contrato)\
-                .eq('periodo', periodo_seleccionado)\
+                .eq('fecha_datos', periodo_seleccionado)\
                 .execute()
             
             if notas_resultado.data and len(notas_resultado.data) > 0:
                 df_notas = pd.DataFrame(notas_resultado.data)
                 
-                # SUMAR TODO
-                total_sueldo = pd.to_numeric(df_notas['paypal_bruto'], errors='coerce').fillna(0).sum()
-                total_coins = pd.to_numeric(df_notas['coins_incentivo'], errors='coerce').fillna(0).sum()
-                total_paypal_incentivo = pd.to_numeric(df_notas['paypal_incentivo'], errors='coerce').fillna(0).sum()
+                st.success(f"✅ {len(df_notas)} notas de pago encontradas")
                 
-                # TOTAL GENERAL
-                total_general = total_sueldo + total_paypal_incentivo
-                
-                st.success(f"✅ Nota generada para {len(df_notas)} usuarios")
-                
-                st.divider()
-                
-                # MOSTRAR SOLO TOTALES
-                st.markdown("### 💰 Resumen de Pagos del Periodo")
-                
-                col1, col2 = st.columns(2)
+                # Información general
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.metric("💼 Total Sueldo Base", f"${total_sueldo:,.2f}")
-                    st.metric("🎁 Total Incentivo Coins", f"{int(total_coins):,}")
+                    total_coins = df_notas['total_coins'].sum() if 'total_coins' in df_notas.columns else 0
+                    st.metric("💰 Total Coins", f"{int(total_coins):,}")
                 
                 with col2:
-                    st.metric("💵 Total Incentivo PayPal", f"${total_paypal_incentivo:,.2f}")
-                    st.metric("✅ TOTAL A PAGAR", f"${total_general:,.2f}", 
-                             delta=None, delta_color="normal")
+                    total_paypal = df_notas['total_paypal'].sum() if 'total_paypal' in df_notas.columns else 0
+                    st.metric("💵 Total PayPal", f"${float(total_paypal):,.2f}")
+                
+                with col3:
+                    st.metric("👥 Usuarios con Pago", len(df_notas))
                 
                 st.divider()
                 
-                # Info adicional
-                st.info(f"""
-                📊 **Desglose:**
-                - {len(df_notas)} usuarios procesados
-                - Periodo: {obtener_mes_español(periodo_seleccionado)}
-                - Código: {contrato}
-                """)
+                # Tabla de notas
+                st.markdown("### 📋 Detalle de Pagos")
                 
-                # Botón descarga (CSV completo con usuarios)
+                columnas_notas = ['usuario', 'dias', 'horas', 'diamantes', 'nivel', 
+                                 'paypal_bruto', 'incentivo_coins', 'incentivo_paypal', 
+                                 'total_coins', 'total_paypal']
+                
+                df_notas_show = df_notas[[c for c in columnas_notas if c in df_notas.columns]].copy()
+                
+                nombres_notas = {
+                    'usuario': 'Usuario',
+                    'dias': 'Días',
+                    'horas': 'Horas',
+                    'diamantes': 'Diamantes',
+                    'nivel': 'Nivel',
+                    'paypal_bruto': 'Sueldo',
+                    'incentivo_coins': 'Incentivo Coin',
+                    'incentivo_paypal': 'Incentivo PayPal',
+                    'total_coins': 'Total Coin',
+                    'total_paypal': 'Total PayPal'
+                }
+                
+                df_notas_show = df_notas_show.rename(columns={k: v for k, v in nombres_notas.items() if k in df_notas_show.columns})
+                
+                # Formatear
+                if 'Diamantes' in df_notas_show.columns:
+                    df_notas_show['Diamantes'] = df_notas_show['Diamantes'].apply(lambda x: f"{int(x):,}")
+                if 'Incentivo Coin' in df_notas_show.columns:
+                    df_notas_show['Incentivo Coin'] = df_notas_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Total Coin' in df_notas_show.columns:
+                    df_notas_show['Total Coin'] = df_notas_show['Total Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Sueldo' in df_notas_show.columns:
+                    df_notas_show['Sueldo'] = df_notas_show['Sueldo'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Incentivo PayPal' in df_notas_show.columns:
+                    df_notas_show['Incentivo PayPal'] = df_notas_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Total PayPal' in df_notas_show.columns:
+                    df_notas_show['Total PayPal'] = df_notas_show['Total PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                
+                st.dataframe(df_notas_show, use_container_width=True, hide_index=True, height=500)
+                
+                # Botón descarga
                 csv = df_notas.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 Descargar Detalle Completo CSV",
+                    label="📥 Descargar Notas CSV",
                     data=csv,
-                    file_name=f"nota_{contrato}_{periodo_seleccionado}.csv",
-                    mime="text/csv",
-                    help="Descarga el detalle por usuario"
+                    file_name=f"notas_{contrato}_{periodo_seleccionado}.csv",
+                    mime="text/csv"
                 )
             else:
                 st.warning("⚠️ No hay notas generadas para este periodo")
                 st.markdown("""
-                **Las notas se generarán cuando se ejecuten los scripts 09-20.**
+                **Las notas se generarán al cierre del periodo cuando se ejecuten los scripts 09-20.**
                 
-                Una vez procesadas, verás aquí el total a pagar del periodo.
+                Una vez procesadas, aparecerán aquí automáticamente con:
+                - Sueldo base por usuario
+                - Incentivos por nivel
+                - Total a pagar
                 """)
         
         except Exception as e:
             st.error(f"❌ Error al cargar notas: {str(e)}")
-            st.info("💡 Verifica que la tabla 'reportes_contratos' tenga datos para este periodo")
+            st.info("Las notas estarán disponibles cuando se ejecuten los scripts de cierre del periodo (09-20)")
+    
+    with tab4:
+    
+    with tab1:
+        st.caption(f"📊 {len(df)} usuarios")
+        
+        # MOSTRAR TODAS LAS COLUMNAS (vista completa agente)
+        columnas_mostrar = ['usuario', 'agencia', 'dias', 'duracion', 'diamantes', 
+                           'nivel', 'cumple', 'incentivo_coins', 'incentivo_paypal',
+                           'coins_bruto', 'paypal_bruto']
+        
+        df_show = df[[c for c in columnas_mostrar if c in df.columns]].copy()
+        
+        # Renombrar columnas
+        nombres_columnas = {
+            'usuario': 'Usuario',
+            'agencia': 'Agencia',
+            'dias': 'Días',
+            'duracion': 'Horas',
+            'diamantes': 'Diamantes',
+            'nivel': 'Nivel',
+            'cumple': 'Cumple',
+            'incentivo_coins': 'Incentivo Coin',
+            'incentivo_paypal': 'Incentivo PayPal',
+            'coins_bruto': 'Sueldo Coin',
+            'paypal_bruto': 'Sueldo PayPal'
+        }
+        
+        df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
+        
+        # Formatear números
+        if 'Diamantes' in df_show.columns:
+            df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Incentivo Coin' in df_show.columns:
+            df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Incentivo PayPal' in df_show.columns:
+            df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+        
+        if 'Sueldo Coin' in df_show.columns:
+            df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+        
+        if 'Sueldo PayPal' in df_show.columns:
+            df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+        
+        # Configuración de columnas para hacerla más compacta
+        column_config = {
+            'Usuario': st.column_config.TextColumn('Usuario', width='medium'),
+            'Agencia': st.column_config.TextColumn('Agencia', width='small'),
+            'Días': st.column_config.NumberColumn('Días', width='small'),
+            'Horas': st.column_config.TextColumn('Horas', width='small'),
+            'Diamantes': st.column_config.TextColumn('Diamantes', width='medium'),
+            'Nivel': st.column_config.NumberColumn('Nivel', width='small'),
+            'Cumple': st.column_config.TextColumn('Cumple', width='small'),
+            'Incentivo Coin': st.column_config.TextColumn('Incentivo Coin', width='medium'),
+            'Incentivo PayPal': st.column_config.TextColumn('Incentivo PayPal', width='medium'),
+            'Sueldo Coin': st.column_config.TextColumn('Sueldo Coin', width='medium'),
+            'Sueldo PayPal': st.column_config.TextColumn('Sueldo PayPal', width='medium')
+        }
+        
+        st.dataframe(
+            df_show.sort_values('Diamantes', ascending=False), 
+            use_container_width=True, 
+            hide_index=True, 
+            height=500,
+            column_config=column_config
+        )
+    
+    with tab2:
+        df_cumplen = df[df['cumple'] == 'SI']
+        st.caption(f"✅ {len(df_cumplen)} cumplen")
+        
+        if not df_cumplen.empty:
+            df_show = df_cumplen[[c for c in columnas_mostrar if c in df_cumplen.columns]].copy()
+            df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
+            
+            # Formatear igual que arriba
+            if 'Diamantes' in df_show.columns:
+                df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Incentivo Coin' in df_show.columns:
+                df_show['Incentivo Coin'] = df_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Incentivo PayPal' in df_show.columns:
+                df_show['Incentivo PayPal'] = df_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+            if 'Sueldo Coin' in df_show.columns:
+                df_show['Sueldo Coin'] = df_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            if 'Sueldo PayPal' in df_show.columns:
+                df_show['Sueldo PayPal'] = df_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
+            
+            st.dataframe(
+                df_show.sort_values('Diamantes', ascending=False), 
+                use_container_width=True, 
+                hide_index=True, 
+                height=500,
+                column_config=column_config
+            )
+    
+    with tab3:
+        st.subheader("📄 Notas del Periodo")
+        st.caption(f"Contrato: {contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
+        
+        # Obtener notas del periodo desde reportes_contratos
+        supabase = get_supabase()
+        
+        try:
+            notas_resultado = supabase.table('reportes_contratos')\
+                .select('*')\
+                .eq('contrato', contrato)\
+                .eq('fecha_datos', periodo_seleccionado)\
+                .execute()
+            
+            if notas_resultado.data and len(notas_resultado.data) > 0:
+                df_notas = pd.DataFrame(notas_resultado.data)
+                
+                st.success(f"✅ {len(df_notas)} notas encontradas")
+                
+                # Mostrar información general
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_coins = df_notas['total_coins'].sum() if 'total_coins' in df_notas.columns else 0
+                    st.metric("💰 Total Coins", f"{int(total_coins):,}")
+                
+                with col2:
+                    total_paypal = df_notas['total_paypal'].sum() if 'total_paypal' in df_notas.columns else 0
+                    st.metric("💵 Total PayPal", f"${float(total_paypal):,.2f}")
+                
+                with col3:
+                    total_usuarios_nota = len(df_notas)
+                    st.metric("👥 Usuarios en Nota", total_usuarios_nota)
+                
+                st.divider()
+                
+                # Tabla de notas
+                st.markdown("### 📋 Detalle de Notas")
+                
+                # Seleccionar y renombrar columnas relevantes
+                columnas_notas = ['usuario', 'dias', 'horas', 'diamantes', 'nivel', 
+                                 'coins_bruto', 'paypal_bruto', 'incentivo_coins', 
+                                 'incentivo_paypal', 'total_coins', 'total_paypal']
+                
+                df_notas_show = df_notas[[c for c in columnas_notas if c in df_notas.columns]].copy()
+                
+                nombres_notas = {
+                    'usuario': 'Usuario',
+                    'dias': 'Días',
+                    'horas': 'Horas',
+                    'diamantes': 'Diamantes',
+                    'nivel': 'Nivel',
+                    'coins_bruto': 'Sueldo Coin',
+                    'paypal_bruto': 'Sueldo PayPal',
+                    'incentivo_coins': 'Incentivo Coin',
+                    'incentivo_paypal': 'Incentivo PayPal',
+                    'total_coins': 'Total Coin',
+                    'total_paypal': 'Total PayPal'
+                }
+                
+                df_notas_show = df_notas_show.rename(columns={k: v for k, v in nombres_notas.items() if k in df_notas_show.columns})
+                
+                # Formatear
+                if 'Diamantes' in df_notas_show.columns:
+                    df_notas_show['Diamantes'] = df_notas_show['Diamantes'].apply(lambda x: f"{int(x):,}")
+                if 'Sueldo Coin' in df_notas_show.columns:
+                    df_notas_show['Sueldo Coin'] = df_notas_show['Sueldo Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Incentivo Coin' in df_notas_show.columns:
+                    df_notas_show['Incentivo Coin'] = df_notas_show['Incentivo Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Total Coin' in df_notas_show.columns:
+                    df_notas_show['Total Coin'] = df_notas_show['Total Coin'].apply(lambda x: f"{int(x):,}")
+                if 'Sueldo PayPal' in df_notas_show.columns:
+                    df_notas_show['Sueldo PayPal'] = df_notas_show['Sueldo PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Incentivo PayPal' in df_notas_show.columns:
+                    df_notas_show['Incentivo PayPal'] = df_notas_show['Incentivo PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                if 'Total PayPal' in df_notas_show.columns:
+                    df_notas_show['Total PayPal'] = df_notas_show['Total PayPal'].apply(lambda x: f"${float(x):,.2f}")
+                
+                st.dataframe(df_notas_show, use_container_width=True, hide_index=True, height=500)
+                
+                # Botón de descarga
+                csv = df_notas.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Descargar Notas en CSV",
+                    data=csv,
+                    file_name=f"notas_{contrato}_{periodo_seleccionado}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("ℹ️ No hay notas generadas para este periodo aún")
+                st.markdown("""
+                Las notas se generan automáticamente al final de cada periodo.
+                Si el periodo ha cerrado y no ves notas, contacta al administrador.
+                """)
+        
+        except Exception as e:
+            st.error(f"❌ Error al cargar notas: {str(e)}")
+            st.info("Las notas estarán disponibles cuando se procese el cierre del periodo")
     
     with tab4:
         st.markdown("### 📈 Métricas")
@@ -994,13 +1165,21 @@ def mostrar_vista_agente(agente_data):
 # MODO 4: VISTA JUGADORES (token grupal - columnas limitadas)
 # ============================================================================
 
+def obtener_columnas_ocultas(contrato):
+    """Obtiene columnas ocultas"""
+    supabase = get_supabase()
+    resultado = supabase.table('config_columnas_ocultas').select('columna').eq('contrato', contrato).execute()
+    
+    if resultado.data:
+        return [r['columna'] for r in resultado.data]
+    return []
+
 def mostrar_vista_jugadores(token_data):
     """Vista limitada para jugadores (con token grupal)"""
     
     contrato = token_data['contrato']
     nombre = token_data.get('nombre', contrato)
     
-    # ✨ MEJORADO: Obtener columnas ocultas con alias
     columnas_ocultas_config = obtener_columnas_ocultas(contrato)
     
     col_logo, col_titulo, col_whatsapp = st.columns([1, 3, 2])
@@ -1019,8 +1198,7 @@ def mostrar_vista_jugadores(token_data):
                 <span>💬 Soporte</span>
             </a>
         """, unsafe_allow_html=True)
-        st.markdown('<p style="color:#00f2ea; font-size:14px; margin-top:5px;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#fe2c55; font-size:12px; font-weight:600; margin-top:8px;">DUDAS, COMENTARIOS, QUEJAS<br>Chatea con la administración general</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#00f2ea;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
     
     st.divider()
     
@@ -1073,26 +1251,21 @@ def mostrar_vista_jugadores(token_data):
     
     tab1, tab2, tab3, tab4 = st.tabs(["👥 Todos", "✅ Cumplen", "❌ No Cumplen", "📊 Resumen"])
     
-    def formatear_dataframe_jugadores(df_input):
-        """Formatea con columnas ocultas usando aliases"""
-        # Mapeo de configuración a columnas reales
+    def formatear_dataframe(df_input):
+        """Formatea con columnas ocultas"""
         mapeo_ocultar = {
             'coins': 'incentivo_coins',
-            'incentivo_coins': 'incentivo_coins',
-            'paypal': 'incentivo_paypal',
-            'incentivo_paypal': 'incentivo_paypal',
-            'sueldo': 'paypal_bruto',
-            'paypal_bruto': 'paypal_bruto'
+            'paypal': 'incentivo_paypal'
         }
         
-        columnas_a_ocultar = set(['agencia'])  # Siempre ocultar agencia en vista jugadores
+        columnas_a_ocultar = set(['agencia'])
         
         for config in columnas_ocultas_config:
             if config in mapeo_ocultar:
                 columnas_a_ocultar.add(mapeo_ocultar[config])
         
         columnas_orden = ['usuario', 'dias', 'duracion', 'diamantes', 'nivel', 'cumple', 
-                         'incentivo_coins', 'incentivo_paypal', 'paypal_bruto']
+                         'incentivo_coins', 'incentivo_paypal']
         
         columnas_mostrar = [c for c in columnas_orden if c in df_input.columns and c not in columnas_a_ocultar]
         
@@ -1106,8 +1279,7 @@ def mostrar_vista_jugadores(token_data):
             'nivel': 'Nivel',
             'cumple': 'Cumple',
             'incentivo_coins': 'Coins',
-            'incentivo_paypal': 'PayPal',
-            'paypal_bruto': 'Sueldo'
+            'incentivo_paypal': 'PayPal'
         }
         
         df_show = df_show.rename(columns={k: v for k, v in nombres.items() if k in df_show.columns})
@@ -1121,29 +1293,26 @@ def mostrar_vista_jugadores(token_data):
         if 'PayPal' in df_show.columns:
             df_show['PayPal'] = df_show['PayPal'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
         
-        if 'Sueldo' in df_show.columns:
-            df_show['Sueldo'] = df_show['Sueldo'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
-        
         return df_show
     
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
-        st.dataframe(formatear_dataframe_jugadores(df.sort_values('diamantes', ascending=False)), 
-                    use_container_width=True, hide_index=True, height=500)
+        st.dataframe(formatear_dataframe(df.sort_values('diamantes', ascending=False)), 
+                    use_container_width=False, hide_index=True, height=500)
     
     with tab2:
         df_cumplen = df[df['cumple'] == 'SI']
         st.caption(f"✅ {len(df_cumplen)} cumplen")
         if not df_cumplen.empty:
-            st.dataframe(formatear_dataframe_jugadores(df_cumplen.sort_values('diamantes', ascending=False)), 
-                        use_container_width=True, hide_index=True, height=500)
+            st.dataframe(formatear_dataframe(df_cumplen.sort_values('diamantes', ascending=False)), 
+                        use_container_width=False, hide_index=True, height=500)
     
     with tab3:
         df_no = df[df['cumple'] == 'NO']
         st.caption(f"❌ {len(df_no)} no cumplen")
         if not df_no.empty:
-            st.dataframe(formatear_dataframe_jugadores(df_no.sort_values('diamantes', ascending=False)), 
-                        use_container_width=True, hide_index=True, height=500)
+            st.dataframe(formatear_dataframe(df_no.sort_values('diamantes', ascending=False)), 
+                        use_container_width=False, hide_index=True, height=500)
     
     with tab4:
         st.markdown("### 📈 Métricas")
