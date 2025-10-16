@@ -1,7 +1,7 @@
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
-# Build: 2025-10-15c - FINAL con Notas consolidadas
+# Build: 2025-10-15d - CORREGIDO: Lee de resumen_contratos
 # ============================================================================
 
 import streamlit as st
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-15c")
+st.sidebar.caption("🔧 Build: 2025-10-15d")
 
 # ============================================================================
 # ESTILOS CSS
@@ -900,40 +900,36 @@ def mostrar_vista_agente(agente_data):
         supabase = get_supabase()
         
         try:
-            # Obtener TODOS los registros del contrato/periodo para sumar
-            notas_resultado = supabase.table('reportes_contratos')\
-                .select('paypal_bruto, coins_incentivo, paypal_incentivo')\
+            # ✅ CORREGIDO: Leer de resumen_contratos (totales ya calculados)
+            resumen_resultado = supabase.table('resumen_contratos')\
+                .select('*')\
                 .eq('contrato', contrato)\
                 .eq('periodo', periodo_seleccionado)\
                 .execute()
             
-            if notas_resultado.data and len(notas_resultado.data) > 0:
-                df_notas = pd.DataFrame(notas_resultado.data)
+            if resumen_resultado.data and len(resumen_resultado.data) > 0:
+                resumen = resumen_resultado.data[0]
                 
-                # SUMAR TODO
-                total_sueldo = pd.to_numeric(df_notas['paypal_bruto'], errors='coerce').fillna(0).sum()
-                total_coins = pd.to_numeric(df_notas['coins_incentivo'], errors='coerce').fillna(0).sum()
-                total_paypal_incentivo = pd.to_numeric(df_notas['paypal_incentivo'], errors='coerce').fillna(0).sum()
+                # Obtener valores del resumen (ya calculados por Python)
+                total_coins = int(resumen.get('total_coins', 0))
+                total_paypal = float(resumen.get('total_paypal', 0))
+                total_final = float(resumen.get('total_final', 0))
+                usuarios_validos = int(resumen.get('usuarios_validos', 0))
                 
-                # TOTAL GENERAL
-                total_general = total_sueldo + total_paypal_incentivo
-                
-                st.success(f"✅ Nota generada para {len(df_notas)} usuarios")
+                st.success(f"✅ Nota generada para {usuarios_validos} usuarios que cumplen")
                 
                 st.divider()
                 
-                # MOSTRAR SOLO TOTALES
+                # MOSTRAR SOLO TOTALES (sin duplicar valores)
                 st.markdown("### 💰 Resumen de Pagos del Periodo")
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.metric("💼 Total Sueldo Base", f"${total_sueldo:,.2f}")
-                    st.metric("🎁 Total Incentivo Coins", f"{int(total_coins):,}")
+                    st.metric("🎁 Total Incentivo Coins", f"{total_coins:,}")
                 
                 with col2:
-                    st.metric("💵 Total Incentivo PayPal", f"${total_paypal_incentivo:,.2f}")
-                    st.metric("✅ TOTAL A PAGAR", f"${total_general:,.2f}", 
+                    st.metric("✅ TOTAL A PAGAR", f"${total_final:,.2f}", 
                              delta=None, delta_color="normal")
                 
                 st.divider()
@@ -941,20 +937,33 @@ def mostrar_vista_agente(agente_data):
                 # Info adicional
                 st.info(f"""
                 📊 **Desglose:**
-                - {len(df_notas)} usuarios procesados
+                - {usuarios_validos} usuarios que cumplen
                 - Periodo: {obtener_mes_español(periodo_seleccionado)}
                 - Código: {contrato}
+                - Total Coins: {total_coins:,}
+                - Total PayPal: ${total_paypal:,.2f}
                 """)
                 
-                # Botón descarga (CSV completo con usuarios)
-                csv = df_notas.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Descargar Detalle Completo CSV",
-                    data=csv,
-                    file_name=f"nota_{contrato}_{periodo_seleccionado}.csv",
-                    mime="text/csv",
-                    help="Descarga el detalle por usuario"
-                )
+                # Botón para ver detalle en reportes_contratos
+                if st.button("🔍 Ver Detalle por Usuario"):
+                    detalle = supabase.table('reportes_contratos')\
+                        .select('*')\
+                        .eq('contrato', contrato)\
+                        .eq('periodo', periodo_seleccionado)\
+                        .execute()
+                    
+                    if detalle.data:
+                        df_detalle = pd.DataFrame(detalle.data)
+                        st.dataframe(df_detalle, use_container_width=True, hide_index=True)
+                        
+                        # Botón descarga
+                        csv = df_detalle.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Descargar Detalle CSV",
+                            data=csv,
+                            file_name=f"detalle_{contrato}_{periodo_seleccionado}.csv",
+                            mime="text/csv"
+                        )
             else:
                 st.warning("⚠️ No hay notas generadas para este periodo")
                 st.markdown("""
@@ -965,7 +974,7 @@ def mostrar_vista_agente(agente_data):
         
         except Exception as e:
             st.error(f"❌ Error al cargar notas: {str(e)}")
-            st.info("💡 Verifica que la tabla 'reportes_contratos' tenga datos para este periodo")
+            st.info("💡 Verifica que la tabla 'resumen_contratos' tenga datos para este periodo")
     
     with tab4:
         st.markdown("### 📈 Métricas")
