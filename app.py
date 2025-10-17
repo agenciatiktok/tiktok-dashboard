@@ -216,28 +216,58 @@ def cambiar_password_agente(usuario, nueva_password):
 # ============================================================================
 
 def obtener_periodos_disponibles():
-    """Obtiene periodos disponibles - SIN CACHE"""
+    """Obtiene periodos disponibles usando función SQL optimizada"""
     supabase = get_supabase()
     
-    # 🔥 TRAER ABSOLUTAMENTE TODOS los registros únicos
-    resultado = supabase.table('usuarios_tiktok')\
-        .select('fecha_datos')\
-        .execute()
-    
-    if resultado.data:
-        # Obtener TODAS las fechas únicas (sin límite)
-        todas_fechas = [r['fecha_datos'] for r in resultado.data if r.get('fecha_datos')]
-        fechas_unicas = sorted(list(set(todas_fechas)), reverse=True)
+    try:
+        # OPCIÓN A: Intentar usar función RPC (si existe)
+        try:
+            resultado_rpc = supabase.rpc('obtener_fechas_disponibles').execute()
+            if resultado_rpc.data:
+                fechas = [r['fecha_datos'] for r in resultado_rpc.data]
+                st.sidebar.success(f"✅ Usando RPC: {len(fechas)} fechas")
+                st.sidebar.write("📋 Fechas:", fechas)
+                return fechas
+        except Exception as e_rpc:
+            st.sidebar.warning(f"⚠️ RPC no disponible: {str(e_rpc)}")
         
-        # 🔍 DEBUG: Mostrar en sidebar
-        st.sidebar.write(f"🔍 Total registros: {len(resultado.data)}")
-        st.sidebar.write(f"📅 Fechas únicas encontradas: {len(fechas_unicas)}")
+        # OPCIÓN B: Paginación manual (fallback)
+        todas_fechas = set()
+        offset = 0
+        batch_size = 1000
+        batch_count = 0
+        
+        while batch_count < 10:  # Máximo 10 batches = 10,000 registros
+            resultado = supabase.table('usuarios_tiktok')\
+                .select('fecha_datos')\
+                .range(offset, offset + batch_size - 1)\
+                .execute()
+            
+            if not resultado.data or len(resultado.data) == 0:
+                break
+            
+            # Extraer fechas del batch
+            fechas_batch = [r['fecha_datos'] for r in resultado.data if r.get('fecha_datos')]
+            todas_fechas.update(fechas_batch)
+            batch_count += 1
+            
+            # Si obtuvimos menos que batch_size, ya terminamos
+            if len(resultado.data) < batch_size:
+                break
+            
+            offset += batch_size
+        
+        fechas_unicas = sorted(list(todas_fechas), reverse=True)
+        
+        st.sidebar.success(f"✅ Paginación: {len(fechas_unicas)} fechas únicas")
+        st.sidebar.write(f"📦 Procesados {batch_count} batches")
         st.sidebar.write("📋 Fechas:", fechas_unicas)
         
         return fechas_unicas
-    
-    st.sidebar.warning("⚠️ No se encontraron datos")
-    return []
+        
+    except Exception as e:
+        st.sidebar.error(f"❌ Error: {str(e)}")
+        return []
 
 def obtener_mes_español(fecha_str):
     """Convierte fecha a Mes YYYY en español"""
