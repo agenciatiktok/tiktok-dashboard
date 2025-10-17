@@ -213,14 +213,11 @@ def cambiar_password_agente(usuario, nueva_password):
 def obtener_periodos_disponibles():
     """Obtiene periodos disponibles"""
     supabase = get_supabase()
-    resultado = supabase.table('usuarios_tiktok').select('fecha_datos').execute()
-    
-    # 🔍 DEBUG TEMPORAL
-    st.write("🔍 DEBUG - Total registros:", len(resultado.data) if resultado.data else 0)
+    # 🔥 CORREGIDO: Aumentar límite para traer todos los registros
+    resultado = supabase.table('usuarios_tiktok').select('fecha_datos').limit(5000).execute()
     
     if resultado.data:
         fechas = sorted(list(set([r['fecha_datos'] for r in resultado.data])), reverse=True)
-        st.write("🔍 DEBUG - Períodos encontrados:", fechas)
         return fechas
     return []
 
