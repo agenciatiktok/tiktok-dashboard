@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-15d")
+st.sidebar.caption("🔧 Build: 2025-10-16a-CACHE-FIX")
 
 # ============================================================================
 # ESTILOS CSS
@@ -211,14 +211,22 @@ def cambiar_password_agente(usuario, nueva_password):
 # ============================================================================
 
 def obtener_periodos_disponibles():
-    """Obtiene periodos disponibles"""
+    """Obtiene periodos disponibles - SIN CACHE"""
     supabase = get_supabase()
-    # 🔥 CORREGIDO: Aumentar límite para traer todos los registros
-    resultado = supabase.table('usuarios_tiktok').select('fecha_datos').limit(5000).execute()
+    
+    # 🔥 SOLUCIÓN DEFINITIVA: Traer TODOS ordenados descendente
+    # y tomar solo los primeros 10000 (suficiente para años de datos)
+    resultado = supabase.table('usuarios_tiktok')\
+        .select('fecha_datos')\
+        .order('fecha_datos', desc=True)\
+        .limit(10000)\
+        .execute()
     
     if resultado.data:
+        # Obtener solo valores únicos
         fechas = sorted(list(set([r['fecha_datos'] for r in resultado.data])), reverse=True)
         return fechas
+    
     return []
 
 def obtener_mes_español(fecha_str):
