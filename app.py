@@ -26,6 +26,37 @@ st.set_page_config(
 )
 
 # Build tracking
+
+# === SELECTOR DE PERIODO (sin filtros ni cache) ===
+MESES_ES = {
+    "01":"Enero","02":"Febrero","03":"Marzo","04":"Abril","05":"Mayo","06":"Junio",
+    "07":"Julio","08":"Agosto","09":"Septiembre","10":"Octubre","11":"Noviembre","12":"Diciembre"
+}
+def _label_fecha(fecha_ymd: str) -> str:
+    try:
+        y, m, d = str(fecha_ymd).split("-")
+        return f"{int(d)} de {MESES_ES.get(m, m)}, {y}"
+    except Exception:
+        return str(fecha_ymd)
+
+fechas = obtener_periodos_disponibles()
+fechas = [str(f).strip() for f in fechas if f]
+fechas = sorted(set(fechas), reverse=True)
+
+st.sidebar.caption(f"🧪 Fechas detectadas: {len(fechas)}")
+if fechas:
+    st.sidebar.write(fechas[:20])
+
+if st.sidebar.button("🔄 Refrescar periodos"):
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    st.rerun()
+
+periodo = st.selectbox("Periodo:", options=fechas, index=0, format_func=_label_fecha)
+
+
 st.sidebar.caption("🔧 Build: 2025-10-16-FIX")
 
 # ============================================================================
@@ -210,23 +241,27 @@ def cambiar_password_agente(usuario, nueva_password):
 # FUNCIONES COMPARTIDAS
 # ============================================================================
 
+
 def obtener_periodos_disponibles():
-    """Obtiene periodos disponibles - SIN CACHE"""
+    """Obtiene periodos disponibles - SIN CACHE y normalizados"""
+    import re as _re
     supabase = get_supabase()
-    
-    # 🔥 SOLUCIÓN DEFINITIVA: Traer TODOS ordenados descendente
-    resultado = supabase.table('usuarios_tiktok')\
-        .select('fecha_datos')\
-        .order('fecha_datos', desc=True)\
-        .limit(10000)\
-        .execute()
-    
-    if resultado.data:
-        # Obtener solo valores únicos
-        fechas = sorted(list(set([r['fecha_datos'] for r in resultado.data])), reverse=True)
-        return fechas
-    
-    return []
+    r = (supabase.table('usuarios_tiktok')
+         .select('fecha_datos')
+         .order('fecha_datos', desc=True)
+         .limit(10000)
+         .execute())
+    fechas = []
+    if getattr(r, "data", None):
+        for row in r.data:
+            raw = row.get('fecha_datos')
+            if raw is None:
+                continue
+            val = str(raw).strip()
+            if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", val):
+                fechas.append(val)
+    fechas = sorted(set(fechas), reverse=True)
+    return fechas
 
 def obtener_mes_español(fecha_str):
     """Convierte fecha a Mes YYYY en español"""
