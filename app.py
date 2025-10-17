@@ -216,7 +216,11 @@ def cambiar_password_agente(usuario, nueva_password):
 # ============================================================================
 
 def obtener_periodos_disponibles():
-    """Obtiene periodos disponibles usando función SQL optimizada"""
+    """
+    Obtiene periodos disponibles con lógica inteligente:
+    - Siempre muestra cierres de mes (último día del mes)
+    - Para cada mes, solo muestra la fecha MÁS RECIENTE
+    """
     supabase = get_supabase()
     
     try:
@@ -225,9 +229,10 @@ def obtener_periodos_disponibles():
             resultado_rpc = supabase.rpc('obtener_fechas_disponibles').execute()
             if resultado_rpc.data:
                 fechas = [r['fecha_datos'] for r in resultado_rpc.data]
-                st.sidebar.success(f"✅ Usando RPC: {len(fechas)} fechas")
-                st.sidebar.write("📋 Fechas:", fechas)
-                return fechas
+                fechas_filtradas = filtrar_fechas_inteligente(fechas)
+                st.sidebar.success(f"✅ Usando RPC: {len(fechas_filtradas)} fechas visibles")
+                st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
+                return fechas_filtradas
         except Exception as e_rpc:
             st.sidebar.warning(f"⚠️ RPC no disponible: {str(e_rpc)}")
         
@@ -257,17 +262,79 @@ def obtener_periodos_disponibles():
             
             offset += batch_size
         
-        fechas_unicas = sorted(list(todas_fechas), reverse=True)
+        fechas_unicas = list(todas_fechas)
+        fechas_filtradas = filtrar_fechas_inteligente(fechas_unicas)
         
-        st.sidebar.success(f"✅ Paginación: {len(fechas_unicas)} fechas únicas")
+        st.sidebar.success(f"✅ Paginación: {len(fechas_filtradas)} fechas visibles")
         st.sidebar.write(f"📦 Procesados {batch_count} batches")
-        st.sidebar.write("📋 Fechas:", fechas_unicas)
+        st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
         
-        return fechas_unicas
+        return fechas_filtradas
         
     except Exception as e:
         st.sidebar.error(f"❌ Error: {str(e)}")
         return []
+
+def filtrar_fechas_inteligente(fechas_str):
+    """
+    Filtra fechas con lógica inteligente:
+    - Cierres de mes (último día): SIEMPRE
+    - Fechas intermedias: Solo la MÁS RECIENTE por mes
+    """
+    from datetime import datetime
+    from collections import defaultdict
+    
+    if not fechas_str:
+        return []
+    
+    # Convertir strings a datetime y agrupar por mes
+    fechas_obj = []
+    for f_str in fechas_str:
+        try:
+            f_obj = datetime.strptime(str(f_str).strip(), '%Y-%m-%d')
+            fechas_obj.append(f_obj)
+        except:
+            continue
+    
+    # Agrupar por año-mes
+    por_mes = defaultdict(list)
+    for f in fechas_obj:
+        clave_mes = f.strftime('%Y-%m')
+        por_mes[clave_mes].append(f)
+    
+    # Filtrar: cierres de mes + fecha más reciente por mes
+    fechas_finales = []
+    
+    for mes, fechas_del_mes in por_mes.items():
+        fechas_del_mes_sorted = sorted(fechas_del_mes, reverse=True)  # Más reciente primero
+        
+        # Obtener último día del mes
+        primera_fecha = fechas_del_mes_sorted[0]
+        año = primera_fecha.year
+        mes_num = primera_fecha.month
+        
+        # Último día del mes
+        if mes_num == 12:
+            ultimo_dia = 31
+        else:
+            from calendar import monthrange
+            ultimo_dia = monthrange(año, mes_num)[1]
+        
+        # Buscar si hay cierre de mes
+        cierre_existe = False
+        for f in fechas_del_mes:
+            if f.day == ultimo_dia:
+                fechas_finales.append(f)
+                cierre_existe = True
+                break
+        
+        # Si NO hay cierre, agregar la más reciente
+        if not cierre_existe:
+            fechas_finales.append(fechas_del_mes_sorted[0])
+    
+    # Ordenar descendente y convertir a strings
+    fechas_finales_sorted = sorted(fechas_finales, reverse=True)
+    return [f.strftime('%Y-%m-%d') for f in fechas_finales_sorted]
 
 def obtener_mes_español(fecha_str):
     """Convierte fecha a Mes YYYY en español"""
