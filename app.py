@@ -1,4 +1,5 @@
-﻿# ============================================================================
+﻿# -*- coding: utf-8 -*-
+# ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pÃºblica + Login Admin + Login Agente + Vista Jugadores
 # Build: 2025-10-15d - CORREGIDO: Lee de resumen_contratos
@@ -286,7 +287,7 @@ def obtener_periodos_disponibles():
     fechas = sorted(set(fechas), reverse=True)
     return fechas
 
-def obtener_mes_espaÃ±ol(fecha_str):
+def obtener_mes_espanol(fecha_str):
     """Convierte fecha a Mes YYYY en espaÃ±ol"""
     meses = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
@@ -748,7 +749,7 @@ def mostrar_panel_admin(token_data):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric("ðŸ“… Periodo Actual", obtener_mes_espaÃ±ol(periodo_actual))
+                st.metric("ðŸ“… Periodo Actual", obtener_mes_espanol(periodo_actual))
             
             with col2:
                 st.metric("ðŸ“Š Periodos Disponibles", len(periodos))
@@ -852,13 +853,13 @@ def mostrar_vista_agente(agente_data):
         )
     
     with col2:
-        st.metric("ðŸ“† Periodo", obtener_mes_espaÃ±ol(periodo_seleccionado))
+        st.metric("ðŸ“† Periodo", obtener_mes_espanol(periodo_seleccionado))
     
     with st.spinner('ðŸ“„ Cargando datos...'):
         df = obtener_datos_contrato(contrato, periodo_seleccionado)
     
     if df.empty:
-        st.info(f"â„¹ï¸ Sin datos para el periodo {obtener_mes_espaÃ±ol(periodo_seleccionado)}")
+        st.info(f"â„¹ï¸ Sin datos para el periodo {obtener_mes_espanol(periodo_seleccionado)}")
         st.stop()
     
     st.divider()
@@ -954,7 +955,7 @@ def mostrar_vista_agente(agente_data):
     
     with tab3:
         st.subheader("ðŸ“„ Notas del Periodo")
-        st.caption(f"{contrato} | Periodo: {obtener_mes_espaÃ±ol(periodo_seleccionado)}")
+        st.caption(f"{contrato} | Periodo: {obtener_mes_espanol(periodo_seleccionado)}")
         
         st.info("""
         ðŸ“ **Sobre las Notas**
@@ -1004,7 +1005,7 @@ def mostrar_vista_agente(agente_data):
                 st.info(f"""
                 ðŸ“Š **Desglose:**
                 - {usuarios_validos} usuarios que cumplen
-                - Periodo: {obtener_mes_espaÃ±ol(periodo_seleccionado)}
+                - Periodo: {obtener_mes_espanol(periodo_seleccionado)}
                 - CÃ³digo: {contrato}
                 - Total Coins: {total_coins:,}
                 - Total PayPal: ${total_paypal:,.2f}
@@ -1135,7 +1136,7 @@ def mostrar_vista_jugadores(token_data):
         )
     
     with col2:
-        st.metric("ðŸ“† Periodo", obtener_mes_espaÃ±ol(periodo_seleccionado))
+        st.metric("ðŸ“† Periodo", obtener_mes_espanol(periodo_seleccionado))
     
     with st.spinner('ðŸ“„ Cargando...'):
         df = obtener_datos_contrato(contrato, periodo_seleccionado)
@@ -1301,4 +1302,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
