@@ -28,6 +28,11 @@ st.set_page_config(
 # Build tracking
 st.sidebar.caption("🔧 Build: 2025-10-17-FINAL")
 
+# Botón para forzar recarga
+if st.sidebar.button("🔄 Forzar Recarga de Periodos"):
+    st.cache_data.clear()
+    st.rerun()
+
 # ============================================================================
 # ESTILOS CSS
 # ============================================================================
@@ -214,19 +219,24 @@ def obtener_periodos_disponibles():
     """Obtiene periodos disponibles - SIN CACHE"""
     supabase = get_supabase()
     
-    # 🔥 SOLUCIÓN DEFINITIVA: Traer TODOS ordenados descendente
-    # y tomar solo los primeros 10000 (suficiente para años de datos)
+    # 🔥 TRAER ABSOLUTAMENTE TODOS los registros únicos
     resultado = supabase.table('usuarios_tiktok')\
         .select('fecha_datos')\
-        .order('fecha_datos', desc=True)\
-        .limit(10000)\
         .execute()
     
     if resultado.data:
-        # Obtener solo valores únicos
-        fechas = sorted(list(set([r['fecha_datos'] for r in resultado.data])), reverse=True)
-        return fechas
+        # Obtener TODAS las fechas únicas (sin límite)
+        todas_fechas = [r['fecha_datos'] for r in resultado.data if r.get('fecha_datos')]
+        fechas_unicas = sorted(list(set(todas_fechas)), reverse=True)
+        
+        # 🔍 DEBUG: Mostrar en sidebar
+        st.sidebar.write(f"🔍 Total registros: {len(resultado.data)}")
+        st.sidebar.write(f"📅 Fechas únicas encontradas: {len(fechas_unicas)}")
+        st.sidebar.write("📋 Fechas:", fechas_unicas)
+        
+        return fechas_unicas
     
+    st.sidebar.warning("⚠️ No se encontraron datos")
     return []
 
 def obtener_mes_español(fecha_str):
