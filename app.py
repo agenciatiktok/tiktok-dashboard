@@ -288,7 +288,7 @@ def obtener_periodos_disponibles():
     return fechas
 
 def obtener_mes_espanol(fecha_str):
-    """Convierte fecha a Mes YYYY en espaÃ±ol"""
+    """Convierte fecha a Mes YYYY en espanol"""
     meses = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
         5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -300,8 +300,8 @@ def obtener_mes_espanol(fecha_str):
     except:
         return fecha_str
 
-def formatear_fecha_espaÃ±ol(fecha_str):
-    """Convierte fecha a DD de Mes, YYYY en espaÃ±ol"""
+def formatear_fecha_espanol(fecha_str):
+    """Convierte fecha a DD de Mes, YYYY en espanol"""
     meses = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
         5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -848,7 +848,7 @@ def mostrar_vista_agente(agente_data):
         periodo_seleccionado = st.selectbox(
             "ðŸ“… Periodo:",
             periodos,
-            format_func=formatear_fecha_espaÃ±ol,
+            format_func=formatear_fecha_espanol,
             key="periodo_agente"
         )
     
@@ -1132,7 +1132,7 @@ def mostrar_vista_jugadores(token_data):
         periodo_seleccionado = st.selectbox(
             "ðŸ“… Periodo:",
             periodos,
-            format_func=formatear_fecha_espaÃ±ol
+            format_func=formatear_fecha_espanol
         )
     
     with col2:
@@ -1302,6 +1302,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
