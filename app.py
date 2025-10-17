@@ -1,10 +1,33 @@
-# ============================================================================
+﻿# ============================================================================
 # app.py - Sistema Completo TikTok Live
-# Pantalla pública + Login Admin + Login Agente + Vista Jugadores
+# Pantalla pÃºblica + Login Admin + Login Agente + Vista Jugadores
 # Build: 2025-10-15d - CORREGIDO: Lee de resumen_contratos
 # ============================================================================
 
 import streamlit as st
+
+# --- SAFE SHIM to avoid NameError if order changes ---
+def get_periodos_safe():
+    try:
+        return obtener_periodos_disponibles()
+    except NameError:
+        import re as _re
+        supabase = get_supabase()
+        r = (supabase.table('usuarios_tiktok')
+             .select('fecha_datos')
+             .order('fecha_datos', desc=True)
+             .limit(10000)
+             .execute())
+        fechas = []
+        if getattr(r, "data", None):
+            for row in r.data:
+                raw = row.get('fecha_datos')
+                if raw is None:
+                    continue
+                val = str(raw).strip()
+                if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", val):
+                    fechas.append(val)
+        return sorted(set(fechas), reverse=True)
 import pandas as pd
 from supabase import create_client
 import os
@@ -17,10 +40,10 @@ import plotly.express as px
 # Cargar variables de entorno
 load_dotenv()
 
-# Configurar página
+# Configurar pÃ¡gina
 st.set_page_config(
     page_title="Sistema TikTok Live",
-    page_icon="📊",
+    page_icon="ðŸ“Š",
     layout="wide",
     initial_sidebar_state="auto"
 )
@@ -39,15 +62,15 @@ def _label_fecha(fecha_ymd: str) -> str:
     except Exception:
         return str(fecha_ymd)
 
-fechas = obtener_periodos_disponibles()
+fechas = get_periodos_safe()
 fechas = [str(f).strip() for f in fechas if f]
 fechas = sorted(set(fechas), reverse=True)
 
-st.sidebar.caption(f"🧪 Fechas detectadas: {len(fechas)}")
+st.sidebar.caption(f"ðŸ§ª Fechas detectadas: {len(fechas)}")
 if fechas:
     st.sidebar.write(fechas[:20])
 
-if st.sidebar.button("🔄 Refrescar periodos"):
+if st.sidebar.button("ðŸ”„ Refrescar periodos"):
     try:
         st.cache_data.clear()
     except Exception:
@@ -57,7 +80,7 @@ if st.sidebar.button("🔄 Refrescar periodos"):
 periodo = st.selectbox("Periodo:", options=fechas, index=0, format_func=_label_fecha)
 
 
-st.sidebar.caption("🔧 Build: 2025-10-16-FIX")
+st.sidebar.caption("ðŸ”§ Build: 2025-10-16-FIX")
 
 # ============================================================================
 # ESTILOS CSS
@@ -164,7 +187,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# CONEXIÓN SUPABASE
+# CONEXIÃ“N SUPABASE
 # ============================================================================
 
 @st.cache_resource
@@ -178,13 +201,13 @@ def get_supabase():
         key = os.getenv("SUPABASE_SERVICE_KEY")
     
     if not url or not key:
-        st.error("❌ Error: Credenciales de Supabase no configuradas")
+        st.error("âŒ Error: Credenciales de Supabase no configuradas")
         st.stop()
     
     return create_client(url, key)
 
 # ============================================================================
-# FUNCIONES DE AUTENTICACIÓN
+# FUNCIONES DE AUTENTICACIÃ“N
 # ============================================================================
 
 def verificar_token_admin(token):
@@ -226,7 +249,7 @@ def verificar_login_agente(usuario, password):
     return None
 
 def cambiar_password_agente(usuario, nueva_password):
-    """Cambia la contraseña del agente"""
+    """Cambia la contraseÃ±a del agente"""
     supabase = get_supabase()
     try:
         supabase.table('agentes_login')\
@@ -263,8 +286,8 @@ def obtener_periodos_disponibles():
     fechas = sorted(set(fechas), reverse=True)
     return fechas
 
-def obtener_mes_español(fecha_str):
-    """Convierte fecha a Mes YYYY en español"""
+def obtener_mes_espaÃ±ol(fecha_str):
+    """Convierte fecha a Mes YYYY en espaÃ±ol"""
     meses = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
         5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -276,8 +299,8 @@ def obtener_mes_español(fecha_str):
     except:
         return fecha_str
 
-def formatear_fecha_español(fecha_str):
-    """Convierte fecha a DD de Mes, YYYY en español"""
+def formatear_fecha_espaÃ±ol(fecha_str):
+    """Convierte fecha a DD de Mes, YYYY en espaÃ±ol"""
     meses = {
         1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
         5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
@@ -299,7 +322,7 @@ def obtener_incentivos():
     return pd.DataFrame()
 
 def determinar_nivel(dias, horas):
-    """Determina nivel según días y horas"""
+    """Determina nivel segÃºn dÃ­as y horas"""
     try: 
         d = float(dias)
     except: 
@@ -315,7 +338,7 @@ def determinar_nivel(dias, horas):
     return 0
 
 def calcular_incentivos(df_incentivos, diamantes, nivel):
-    """Calcula incentivos según tabla horizontal"""
+    """Calcula incentivos segÃºn tabla horizontal"""
     if nivel == 0:
         return (0, 0)
     
@@ -352,8 +375,8 @@ def _col(df, *cands):
 def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
     """
     INTEGRADO DE CHATGPT - MEJORADO
-    Rellena 'usuario' cuando viene vacío usando historico_usuarios.
-    Busca por id_tiktok (o usuario_id) y usa el último username conocido.
+    Rellena 'usuario' cuando viene vacÃ­o usando historico_usuarios.
+    Busca por id_tiktok (o usuario_id) y usa el Ãºltimo username conocido.
     Procesa en lotes de 400 para no sobrecargar Supabase.
     """
     if df.empty or sb is None: 
@@ -388,7 +411,7 @@ def enriquecer_nombres_desde_historial(df: pd.DataFrame, sb) -> pd.DataFrame:
         except Exception:
             rows = []
         
-        # Intento 2: Por usuario_id si no funcionó
+        # Intento 2: Por usuario_id si no funcionÃ³
         if not rows:
             try:
                 r = (sb.table("historico_usuarios")
@@ -426,13 +449,13 @@ def _alias_oculto(col_raw: str) -> str:
     """
     INTEGRADO DE CHATGPT
     Normaliza nombres de columnas para sistema de ocultamiento.
-    Acepta múltiples variaciones.
+    Acepta mÃºltiples variaciones.
     """
     alias = {
         # Base visibles
         "usuario":"usuario","username":"usuario","user":"usuario","nick":"usuario",
         "agencia":"agencia","agency":"agencia","Agencia":"agencia","AGENCIA":"agencia",
-        "dias":"dias","días":"dias","Dias":"dias","Días":"dias",
+        "dias":"dias","dÃ­as":"dias","Dias":"dias","DÃ­as":"dias",
         "duracion":"duracion","horas":"duracion","tiempo":"duracion",
         "diamantes":"diamantes",
         "nivel":"nivel","cumple":"cumple",
@@ -458,7 +481,7 @@ def _leer_reglas_ocultas():
 def obtener_columnas_ocultas(contrato: str):
     """
     MEJORADO CON ALIAS
-    Obtiene columnas ocultas con normalización de nombres
+    Obtiene columnas ocultas con normalizaciÃ³n de nombres
     """
     reglas = _leer_reglas_ocultas()
     ocultas = []
@@ -472,7 +495,7 @@ def obtener_columnas_ocultas(contrato: str):
         
         col = _alias_oculto(col_raw)
         
-        # Aplica si es global (contrato=None) o específico
+        # Aplica si es global (contrato=None) o especÃ­fico
         if (c is None) or (str(c).strip() == "") or (str(c).strip() == str(contrato).strip()):
             ocultas.append(col)
     
@@ -486,7 +509,7 @@ def obtener_datos_contrato(contrato, fecha_datos):
     """
     MEJORADO CON ENRIQUECIMIENTO
     Obtiene datos del contrato desde usuarios_tiktok, 
-    enriquece nombres desde histórico,
+    enriquece nombres desde histÃ³rico,
     y mapea paypal_bruto desde reportes_contratos
     """
     supabase = get_supabase()
@@ -498,7 +521,7 @@ def obtener_datos_contrato(contrato, fecha_datos):
     if config_resultado.data and len(config_resultado.data) > 0:
         valor = config_resultado.data[0].get('nivel1_tabla3', False)
         if isinstance(valor, str):
-            nivel1_tabla3 = valor.upper() in ['SI', 'YES', 'TRUE', '1', 'SÍ']
+            nivel1_tabla3 = valor.upper() in ['SI', 'YES', 'TRUE', '1', 'SÃ']
         else:
             nivel1_tabla3 = bool(valor)
     
@@ -512,7 +535,7 @@ def obtener_datos_contrato(contrato, fecha_datos):
     if resultado.data:
         df = pd.DataFrame(resultado.data)
         
-        # ✨ NUEVO: Enriquecer nombres desde histórico (INTEGRADO DE CHATGPT)
+        # âœ¨ NUEVO: Enriquecer nombres desde histÃ³rico (INTEGRADO DE CHATGPT)
         df = enriquecer_nombres_desde_historial(df, supabase)
         
         # Normalizar horas
@@ -551,7 +574,7 @@ def obtener_datos_contrato(contrato, fecha_datos):
         # Limpiar valores para no cumplen
         df.loc[df['cumple'] == 'NO', ['incentivo_coins', 'incentivo_paypal']] = 0
         
-        # ✨ OBTENER paypal_bruto desde reportes_contratos
+        # âœ¨ OBTENER paypal_bruto desde reportes_contratos
         try:
             reportes = supabase.table('reportes_contratos')\
                 .select('usuario_id, paypal_bruto')\
@@ -578,20 +601,20 @@ def obtener_datos_contrato(contrato, fecha_datos):
     return pd.DataFrame()
 
 # ============================================================================
-# GRÁFICOS
+# GRÃFICOS
 # ============================================================================
 
 def crear_grafico_pastel(nivel_counts):
-    """Crea gráfico de pastel para niveles"""
+    """Crea grÃ¡fico de pastel para niveles"""
     labels = []
     values = []
     colors = []
     
     nivel_map = {
-        3: ('🥇 Nivel 3', '#FFD700'),
-        2: ('🥈 Nivel 2', '#C0C0C0'),
-        1: ('🥉 Nivel 1', '#CD7F32'),
-        0: ('⚫ Nivel 0', '#404040')
+        3: ('ðŸ¥‡ Nivel 3', '#FFD700'),
+        2: ('ðŸ¥ˆ Nivel 2', '#C0C0C0'),
+        1: ('ðŸ¥‰ Nivel 1', '#CD7F32'),
+        0: ('âš« Nivel 0', '#404040')
     }
     
     for nivel in sorted(nivel_counts.index, reverse=True):
@@ -617,11 +640,11 @@ def crear_grafico_pastel(nivel_counts):
     return fig
 
 # ============================================================================
-# MODO 1: PANTALLA PÚBLICA (sin login)
+# MODO 1: PANTALLA PÃšBLICA (sin login)
 # ============================================================================
 
 def mostrar_pantalla_publica():
-    """Pantalla pública con información general"""
+    """Pantalla pÃºblica con informaciÃ³n general"""
     
     col_logo, col_titulo, col_whatsapp = st.columns([1, 3, 2])
     
@@ -629,35 +652,35 @@ def mostrar_pantalla_publica():
         st.image("https://img.icons8.com/color/96/000000/tiktok--v1.png", width=100)
     
     with col_titulo:
-        st.title("🎵 Sistema TikTok Live")
-        st.caption("📊 Plataforma de Gestión de Streamers")
+        st.title("ðŸŽµ Sistema TikTok Live")
+        st.caption("ðŸ“Š Plataforma de GestiÃ³n de Streamers")
     
     with col_whatsapp:
         whatsapp_url = "https://wa.me/5215659842514"
         st.markdown(f"""
             <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
-                <span>💬 Contacto</span>
+                <span>ðŸ’¬ Contacto</span>
             </a>
         """, unsafe_allow_html=True)
-        st.markdown('<p style="color:#00f2ea;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#00f2ea;">ðŸ“ž +52 1 56 5984 2514</p>', unsafe_allow_html=True)
     
     st.divider()
     
     st.info("""
-    ### 👋 Bienvenido al Sistema TikTok Live
+    ### ðŸ‘‹ Bienvenido al Sistema TikTok Live
     
-    **¿Qué puedo hacer aquí?**
-    - 🔐 Administradores: Acceso completo al sistema
-    - 👔 Agentes: Gestión de usuarios y reportes
-    - 🎮 Jugadores: Consulta tu desempeño (requiere token)
+    **Â¿QuÃ© puedo hacer aquÃ­?**
+    - ðŸ” Administradores: Acceso completo al sistema
+    - ðŸ‘” Agentes: GestiÃ³n de usuarios y reportes
+    - ðŸŽ® Jugadores: Consulta tu desempeÃ±o (requiere token)
     
-    **¿Cómo accedo?**
-    - Si eres **jugador**, tu agente te proporcionará un enlace directo
+    **Â¿CÃ³mo accedo?**
+    - Si eres **jugador**, tu agente te proporcionarÃ¡ un enlace directo
     - Si eres **agente**, usa el login de agente
     - Si eres **administrador**, usa el token de acceso
     
-    **💬 ¿Necesitas ayuda?**
-    Contacta por WhatsApp usando el botón de arriba
+    **ðŸ’¬ Â¿Necesitas ayuda?**
+    Contacta por WhatsApp usando el botÃ³n de arriba
     """)
     
     st.divider()
@@ -665,7 +688,7 @@ def mostrar_pantalla_publica():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🔐 Acceso Administración")
+        st.subheader("ðŸ” Acceso AdministraciÃ³n")
         token_admin = st.text_input("Token de Administrador", type="password", key="token_admin_input")
         if st.button("Acceder como Admin", key="btn_admin"):
             if token_admin:
@@ -673,50 +696,50 @@ def mostrar_pantalla_publica():
                 if token_data:
                     st.session_state['modo'] = 'admin'
                     st.session_state['token_data'] = token_data
-                    st.success("✅ Acceso concedido")
+                    st.success("âœ… Acceso concedido")
                     st.rerun()
                 else:
-                    st.error("❌ Token inválido")
+                    st.error("âŒ Token invÃ¡lido")
             else:
-                st.warning("⚠️ Ingresa un token")
+                st.warning("âš ï¸ Ingresa un token")
     
     with col2:
-        st.subheader("👔 Acceso Agentes")
+        st.subheader("ðŸ‘” Acceso Agentes")
         usuario = st.text_input("Usuario", key="usuario_agente_input")
-        password = st.text_input("Contraseña", type="password", key="password_agente_input")
+        password = st.text_input("ContraseÃ±a", type="password", key="password_agente_input")
         if st.button("Acceder como Agente", key="btn_agente"):
             if usuario and password:
                 agente_data = verificar_login_agente(usuario, password)
                 if agente_data:
                     st.session_state['modo'] = 'agente'
                     st.session_state['agente_data'] = agente_data
-                    st.success("✅ Acceso concedido")
+                    st.success("âœ… Acceso concedido")
                     st.rerun()
                 else:
-                    st.error("❌ Usuario o contraseña incorrectos")
+                    st.error("âŒ Usuario o contraseÃ±a incorrectos")
             else:
-                st.warning("⚠️ Completa todos los campos")
+                st.warning("âš ï¸ Completa todos los campos")
 
 # ============================================================================
 # MODO 2: PANEL ADMIN
 # ============================================================================
 
 def mostrar_panel_admin(token_data):
-    """Panel de administración completo"""
+    """Panel de administraciÃ³n completo"""
     
-    st.sidebar.title("🔐 Panel Admin")
-    st.sidebar.success(f"✅ Sesión: {token_data.get('nombre', 'Admin')}")
+    st.sidebar.title("ðŸ” Panel Admin")
+    st.sidebar.success(f"âœ… SesiÃ³n: {token_data.get('nombre', 'Admin')}")
     
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    if st.sidebar.button("ðŸšª Cerrar SesiÃ³n"):
         st.session_state.clear()
         st.rerun()
     
-    st.title("🔐 Panel de Administración")
+    st.title("ðŸ” Panel de AdministraciÃ³n")
     
-    tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "👥 Usuarios", "⚙️ Configuración"])
+    tab1, tab2, tab3 = st.tabs(["ðŸ“Š Dashboard", "ðŸ‘¥ Usuarios", "âš™ï¸ ConfiguraciÃ³n"])
     
     with tab1:
-        st.subheader("📈 Métricas Generales")
+        st.subheader("ðŸ“ˆ MÃ©tricas Generales")
         
         periodos = obtener_periodos_disponibles()
         if periodos:
@@ -725,37 +748,37 @@ def mostrar_panel_admin(token_data):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric("📅 Periodo Actual", obtener_mes_español(periodo_actual))
+                st.metric("ðŸ“… Periodo Actual", obtener_mes_espaÃ±ol(periodo_actual))
             
             with col2:
-                st.metric("📊 Periodos Disponibles", len(periodos))
+                st.metric("ðŸ“Š Periodos Disponibles", len(periodos))
             
             with col3:
-                st.metric("✅ Sistema", "Operativo")
+                st.metric("âœ… Sistema", "Operativo")
         
         st.divider()
-        st.info("💡 Dashboard completo - En desarrollo")
+        st.info("ðŸ’¡ Dashboard completo - En desarrollo")
     
     with tab2:
-        st.subheader("👥 Gestión de Usuarios")
-        st.info("💡 Gestión de usuarios - En desarrollo")
+        st.subheader("ðŸ‘¥ GestiÃ³n de Usuarios")
+        st.info("ðŸ’¡ GestiÃ³n de usuarios - En desarrollo")
     
     with tab3:
-        st.subheader("⚙️ Configuración del Sistema")
-        st.info("💡 Configuración - En desarrollo")
+        st.subheader("âš™ï¸ ConfiguraciÃ³n del Sistema")
+        st.info("ðŸ’¡ ConfiguraciÃ³n - En desarrollo")
 
 # ============================================================================
 # MODO 3: PANEL AGENTE
 # ============================================================================
 
 def mostrar_cambio_password(agente_data):
-    """Forzar cambio de contraseña en primer login"""
-    st.title("🔐 Cambio de Contraseña Obligatorio")
+    """Forzar cambio de contraseÃ±a en primer login"""
+    st.title("ðŸ” Cambio de ContraseÃ±a Obligatorio")
     
     st.warning("""
-    ⚠️ **Acción requerida**
+    âš ï¸ **AcciÃ³n requerida**
     
-    Por seguridad, debes cambiar tu contraseña antes de continuar.
+    Por seguridad, debes cambiar tu contraseÃ±a antes de continuar.
     """)
     
     st.divider()
@@ -765,37 +788,37 @@ def mostrar_cambio_password(agente_data):
     col1, col2 = st.columns(2)
     
     with col1:
-        nueva_password = st.text_input("Nueva Contraseña", type="password", key="nueva_pwd")
+        nueva_password = st.text_input("Nueva ContraseÃ±a", type="password", key="nueva_pwd")
     
     with col2:
-        confirmar_password = st.text_input("Confirmar Contraseña", type="password", key="conf_pwd")
+        confirmar_password = st.text_input("Confirmar ContraseÃ±a", type="password", key="conf_pwd")
     
-    if st.button("💾 Cambiar Contraseña"):
+    if st.button("ðŸ’¾ Cambiar ContraseÃ±a"):
         if not nueva_password or not confirmar_password:
-            st.error("❌ Completa todos los campos")
+            st.error("âŒ Completa todos los campos")
         elif nueva_password != confirmar_password:
-            st.error("❌ Las contraseñas no coinciden")
+            st.error("âŒ Las contraseÃ±as no coinciden")
         elif len(nueva_password) < 6:
-            st.error("❌ La contraseña debe tener al menos 6 caracteres")
+            st.error("âŒ La contraseÃ±a debe tener al menos 6 caracteres")
         else:
             if cambiar_password_agente(usuario, nueva_password):
-                st.success("✅ Contraseña actualizada correctamente")
-                # Actualizar datos en sesión
+                st.success("âœ… ContraseÃ±a actualizada correctamente")
+                # Actualizar datos en sesiÃ³n
                 agente_data['cambio_password'] = True
                 agente_data['password'] = nueva_password
                 st.session_state['agente_data'] = agente_data
                 st.rerun()
             else:
-                st.error("❌ Error al cambiar contraseña")
+                st.error("âŒ Error al cambiar contraseÃ±a")
 
 def mostrar_vista_agente(agente_data):
     """Vista completa del agente con TODOS los datos"""
     
-    st.sidebar.title("👔 Panel Agente")
-    st.sidebar.success(f"✅ {agente_data['usuario']}")
-    st.sidebar.caption(f"📧 {agente_data.get('email', 'N/A')}")
+    st.sidebar.title("ðŸ‘” Panel Agente")
+    st.sidebar.success(f"âœ… {agente_data['usuario']}")
+    st.sidebar.caption(f"ðŸ“§ {agente_data.get('email', 'N/A')}")
     
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    if st.sidebar.button("ðŸšª Cerrar SesiÃ³n"):
         st.session_state.clear()
         st.rerun()
     
@@ -807,7 +830,7 @@ def mostrar_vista_agente(agente_data):
         st.image("https://img.icons8.com/color/96/000000/tiktok--v1.png", width=80)
     
     with col_titulo:
-        st.title(f"👔 Panel del Agente")
+        st.title(f"ðŸ‘” Panel del Agente")
         st.caption(f"{contrato}")
     
     st.divider()
@@ -815,35 +838,35 @@ def mostrar_vista_agente(agente_data):
     periodos = obtener_periodos_disponibles()
     
     if not periodos:
-        st.warning("⚠️ No hay datos disponibles")
+        st.warning("âš ï¸ No hay datos disponibles")
         st.stop()
     
     col1, col2 = st.columns([2, 2])
     
     with col1:
         periodo_seleccionado = st.selectbox(
-            "📅 Periodo:",
+            "ðŸ“… Periodo:",
             periodos,
-            format_func=formatear_fecha_español,
+            format_func=formatear_fecha_espaÃ±ol,
             key="periodo_agente"
         )
     
     with col2:
-        st.metric("📆 Periodo", obtener_mes_español(periodo_seleccionado))
+        st.metric("ðŸ“† Periodo", obtener_mes_espaÃ±ol(periodo_seleccionado))
     
-    with st.spinner('📄 Cargando datos...'):
+    with st.spinner('ðŸ“„ Cargando datos...'):
         df = obtener_datos_contrato(contrato, periodo_seleccionado)
     
     if df.empty:
-        st.info(f"ℹ️ Sin datos para el periodo {obtener_mes_español(periodo_seleccionado)}")
+        st.info(f"â„¹ï¸ Sin datos para el periodo {obtener_mes_espaÃ±ol(periodo_seleccionado)}")
         st.stop()
     
     st.divider()
     
-    tab1, tab2, tab3, tab4 = st.tabs(["👥 Todos", "✅ Cumplen", "📄 Notas del Periodo", "📊 Resumen"])
+    tab1, tab2, tab3, tab4 = st.tabs(["ðŸ‘¥ Todos", "âœ… Cumplen", "ðŸ“„ Notas del Periodo", "ðŸ“Š Resumen"])
     
     with tab1:
-        st.caption(f"📊 {len(df)} usuarios")
+        st.caption(f"ðŸ“Š {len(df)} usuarios")
         
         # MOSTRAR COLUMNAS COMPLETAS (vista agente)
         columnas_mostrar = ['usuario', 'agencia', 'dias', 'duracion', 'diamantes', 
@@ -856,7 +879,7 @@ def mostrar_vista_agente(agente_data):
         nombres_columnas = {
             'usuario': 'Usuario',
             'agencia': 'Agencia',
-            'dias': 'Días',
+            'dias': 'DÃ­as',
             'duracion': 'Horas',
             'diamantes': 'Diamantes',
             'nivel': 'Nivel',
@@ -868,7 +891,7 @@ def mostrar_vista_agente(agente_data):
         
         df_show = df_show.rename(columns={k: v for k, v in nombres_columnas.items() if k in df_show.columns})
         
-        # Formatear números
+        # Formatear nÃºmeros
         if 'Diamantes' in df_show.columns:
             df_show['Diamantes'] = df_show['Diamantes'].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
         
@@ -881,11 +904,11 @@ def mostrar_vista_agente(agente_data):
         if 'Sueldo' in df_show.columns:
             df_show['Sueldo'] = df_show['Sueldo'].apply(lambda x: f"${float(x):,.2f}" if pd.notnull(x) else "$0.00")
         
-        # Configuración de columnas compactas
+        # ConfiguraciÃ³n de columnas compactas
         column_config = {
             'Usuario': st.column_config.TextColumn('Usuario', width='medium'),
             'Agencia': st.column_config.TextColumn('Agencia', width='small'),
-            'Días': st.column_config.NumberColumn('Días', width='small'),
+            'DÃ­as': st.column_config.NumberColumn('DÃ­as', width='small'),
             'Horas': st.column_config.TextColumn('Horas', width='small'),
             'Diamantes': st.column_config.TextColumn('Diamantes', width='medium'),
             'Nivel': st.column_config.NumberColumn('Nivel', width='small'),
@@ -905,7 +928,7 @@ def mostrar_vista_agente(agente_data):
     
     with tab2:
         df_cumplen = df[df['cumple'] == 'SI']
-        st.caption(f"✅ {len(df_cumplen)} cumplen")
+        st.caption(f"âœ… {len(df_cumplen)} cumplen")
         
         if not df_cumplen.empty:
             df_show = df_cumplen[[c for c in columnas_mostrar if c in df_cumplen.columns]].copy()
@@ -930,20 +953,20 @@ def mostrar_vista_agente(agente_data):
             )
     
     with tab3:
-        st.subheader("📄 Notas del Periodo")
-        st.caption(f"{contrato} | Periodo: {obtener_mes_español(periodo_seleccionado)}")
+        st.subheader("ðŸ“„ Notas del Periodo")
+        st.caption(f"{contrato} | Periodo: {obtener_mes_espaÃ±ol(periodo_seleccionado)}")
         
         st.info("""
-        📝 **Sobre las Notas**
+        ðŸ“ **Sobre las Notas**
         
         Las notas muestran el **total consolidado** a pagar por el periodo.
-        Se generan automáticamente mediante los scripts Python 09-20.
+        Se generan automÃ¡ticamente mediante los scripts Python 09-20.
         """)
         
         supabase = get_supabase()
         
         try:
-            # ✅ CORREGIDO: Leer de resumen_contratos (totales ya calculados)
+            # âœ… CORREGIDO: Leer de resumen_contratos (totales ya calculados)
             resumen_resultado = supabase.table('resumen_contratos')\
                 .select('*')\
                 .eq('contrato', contrato)\
@@ -959,36 +982,36 @@ def mostrar_vista_agente(agente_data):
                 total_final = float(resumen.get('total_final', 0))
                 usuarios_validos = int(resumen.get('usuarios_validos', 0))
                 
-                st.success(f"✅ Nota generada para {usuarios_validos} usuarios que cumplen")
+                st.success(f"âœ… Nota generada para {usuarios_validos} usuarios que cumplen")
                 
                 st.divider()
                 
                 # MOSTRAR SOLO TOTALES (sin duplicar valores)
-                st.markdown("### 💰 Resumen de Pagos del Periodo")
+                st.markdown("### ðŸ’° Resumen de Pagos del Periodo")
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.metric("🎁 Total Incentivo Coins", f"{total_coins:,}")
+                    st.metric("ðŸŽ Total Incentivo Coins", f"{total_coins:,}")
                 
                 with col2:
-                    st.metric("✅ TOTAL A PAGAR", f"${total_final:,.2f}", 
+                    st.metric("âœ… TOTAL A PAGAR", f"${total_final:,.2f}", 
                              delta=None, delta_color="normal")
                 
                 st.divider()
                 
                 # Info adicional
                 st.info(f"""
-                📊 **Desglose:**
+                ðŸ“Š **Desglose:**
                 - {usuarios_validos} usuarios que cumplen
-                - Periodo: {obtener_mes_español(periodo_seleccionado)}
-                - Código: {contrato}
+                - Periodo: {obtener_mes_espaÃ±ol(periodo_seleccionado)}
+                - CÃ³digo: {contrato}
                 - Total Coins: {total_coins:,}
                 - Total PayPal: ${total_paypal:,.2f}
                 """)
                 
-                # Botón para ver detalle en reportes_contratos
-                if st.button("🔍 Ver Detalle por Usuario"):
+                # BotÃ³n para ver detalle en reportes_contratos
+                if st.button("ðŸ” Ver Detalle por Usuario"):
                     detalle = supabase.table('reportes_contratos')\
                         .select('*')\
                         .eq('contrato', contrato)\
@@ -999,28 +1022,28 @@ def mostrar_vista_agente(agente_data):
                         df_detalle = pd.DataFrame(detalle.data)
                         st.dataframe(df_detalle, use_container_width=True, hide_index=True)
                         
-                        # Botón descarga
+                        # BotÃ³n descarga
                         csv = df_detalle.to_csv(index=False).encode('utf-8')
                         st.download_button(
-                            label="📥 Descargar Detalle CSV",
+                            label="ðŸ“¥ Descargar Detalle CSV",
                             data=csv,
                             file_name=f"detalle_{contrato}_{periodo_seleccionado}.csv",
                             mime="text/csv"
                         )
             else:
-                st.warning("⚠️ No hay notas generadas para este periodo")
+                st.warning("âš ï¸ No hay notas generadas para este periodo")
                 st.markdown("""
-                **Las notas se generarán cuando se ejecuten los scripts 09-20.**
+                **Las notas se generarÃ¡n cuando se ejecuten los scripts 09-20.**
                 
-                Una vez procesadas, verás aquí el total a pagar del periodo.
+                Una vez procesadas, verÃ¡s aquÃ­ el total a pagar del periodo.
                 """)
         
         except Exception as e:
-            st.error(f"❌ Error al cargar notas: {str(e)}")
-            st.info("💡 Verifica que la tabla 'resumen_contratos' tenga datos para este periodo")
+            st.error(f"âŒ Error al cargar notas: {str(e)}")
+            st.info("ðŸ’¡ Verifica que la tabla 'resumen_contratos' tenga datos para este periodo")
     
     with tab4:
-        st.markdown("### 📈 Métricas")
+        st.markdown("### ðŸ“ˆ MÃ©tricas")
         
         total = len(df)
         cumplen = len(df[df['cumple'] == 'SI'])
@@ -1028,13 +1051,13 @@ def mostrar_vista_agente(agente_data):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("👥 Total", total)
+            st.metric("ðŸ‘¥ Total", total)
         
         with col2:
-            st.metric("✅ Cumplen", cumplen)
+            st.metric("âœ… Cumplen", cumplen)
         
         with col3:
-            st.metric("💎 Diamantes", f"{df['diamantes'].sum():,.0f}")
+            st.metric("ðŸ’Ž Diamantes", f"{df['diamantes'].sum():,.0f}")
         
         st.divider()
         
@@ -1052,7 +1075,7 @@ def mostrar_vista_jugadores(token_data):
     contrato = token_data['contrato']
     nombre = token_data.get('nombre', contrato)
     
-    # ✨ MEJORADO: Obtener columnas ocultas con alias
+    # âœ¨ MEJORADO: Obtener columnas ocultas con alias
     columnas_ocultas_config = obtener_columnas_ocultas(contrato)
     
     col_logo, col_titulo, col_whatsapp = st.columns([1, 3, 2])
@@ -1062,36 +1085,36 @@ def mostrar_vista_jugadores(token_data):
     
     with col_titulo:
         st.title(f"{contrato} - {nombre}")
-        st.caption("📊 Sistema de Consulta")
+        st.caption("ðŸ“Š Sistema de Consulta")
     
     with col_whatsapp:
         whatsapp_url = "https://wa.me/5215659842514"
         st.markdown(f"""
             <a href="{whatsapp_url}" target="_blank" class="whatsapp-button">
-                <span>💬 Soporte</span>
+                <span>ðŸ’¬ Soporte</span>
             </a>
         """, unsafe_allow_html=True)
-        st.markdown('<p style="color:#00f2ea; font-size:14px; margin-top:5px;">📞 +52 1 56 5984 2514</p>', unsafe_allow_html=True)
-        st.markdown('<p style="color:#fe2c55; font-size:12px; font-weight:600; margin-top:8px;">DUDAS, COMENTARIOS, QUEJAS<br>Chatea con la administración general</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#00f2ea; font-size:14px; margin-top:5px;">ðŸ“ž +52 1 56 5984 2514</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#fe2c55; font-size:12px; font-weight:600; margin-top:8px;">DUDAS, COMENTARIOS, QUEJAS<br>Chatea con la administraciÃ³n general</p>', unsafe_allow_html=True)
     
     st.divider()
     
     st.info("""
-    ### 🎁 Sobre tus Regalos del Mes (Incentivos)
+    ### ðŸŽ Sobre tus Regalos del Mes (Incentivos)
     
-    **📅 ¿Cuándo se entregan?**  
-    Los regalos se procesan entre el **día 15 y 25** del mes siguiente.
+    **ðŸ“… Â¿CuÃ¡ndo se entregan?**  
+    Los regalos se procesan entre el **dÃ­a 15 y 25** del mes siguiente.
     
-    **✅ ¿Cómo califico?**  
-    Cumpliendo el mínimo de días, horas y diamantes. Si alcanzaste **Nivel 1, 2 o 3**, ¡tu regalo está asegurado!
+    **âœ… Â¿CÃ³mo califico?**  
+    Cumpliendo el mÃ­nimo de dÃ­as, horas y diamantes. Si alcanzaste **Nivel 1, 2 o 3**, Â¡tu regalo estÃ¡ asegurado!
     
-    **🔄 ¿No recibiste tu regalo?**  
-    ¡Tranquilo! Se acumula automáticamente para el siguiente periodo.
+    **ðŸ”„ Â¿No recibiste tu regalo?**  
+    Â¡Tranquilo! Se acumula automÃ¡ticamente para el siguiente periodo.
     
-    **💬 ¿Dudas?**  
-    Contacta a tu agente o administración por WhatsApp.
+    **ðŸ’¬ Â¿Dudas?**  
+    Contacta a tu agente o administraciÃ³n por WhatsApp.
     
-    **✨ Ten paciencia y confianza** - Cada diamante cuenta. ¡Sigue adelante! 💪
+    **âœ¨ Ten paciencia y confianza** - Cada diamante cuenta. Â¡Sigue adelante! ðŸ’ª
     """)
     
     st.divider()
@@ -1099,35 +1122,35 @@ def mostrar_vista_jugadores(token_data):
     periodos = obtener_periodos_disponibles()
     
     if not periodos:
-        st.warning("⚠️ Sin datos")
+        st.warning("âš ï¸ Sin datos")
         st.stop()
     
     col1, col2 = st.columns([2, 2])
     
     with col1:
         periodo_seleccionado = st.selectbox(
-            "📅 Periodo:",
+            "ðŸ“… Periodo:",
             periodos,
-            format_func=formatear_fecha_español
+            format_func=formatear_fecha_espaÃ±ol
         )
     
     with col2:
-        st.metric("📆 Periodo", obtener_mes_español(periodo_seleccionado))
+        st.metric("ðŸ“† Periodo", obtener_mes_espaÃ±ol(periodo_seleccionado))
     
-    with st.spinner('📄 Cargando...'):
+    with st.spinner('ðŸ“„ Cargando...'):
         df = obtener_datos_contrato(contrato, periodo_seleccionado)
     
     if df.empty:
-        st.info(f"ℹ️ Sin datos")
+        st.info(f"â„¹ï¸ Sin datos")
         st.stop()
     
     st.divider()
     
-    tab1, tab2, tab3, tab4 = st.tabs(["👥 Todos", "✅ Cumplen", "❌ No Cumplen", "📊 Resumen"])
+    tab1, tab2, tab3, tab4 = st.tabs(["ðŸ‘¥ Todos", "âœ… Cumplen", "âŒ No Cumplen", "ðŸ“Š Resumen"])
     
     def formatear_dataframe_jugadores(df_input):
         """Formatea con columnas ocultas usando aliases"""
-        # Mapeo de configuración a columnas reales
+        # Mapeo de configuraciÃ³n a columnas reales
         mapeo_ocultar = {
             'coins': 'incentivo_coins',
             'incentivo_coins': 'incentivo_coins',
@@ -1152,7 +1175,7 @@ def mostrar_vista_jugadores(token_data):
         
         nombres = {
             'usuario': 'Usuario',
-            'dias': 'Días',
+            'dias': 'DÃ­as',
             'duracion': 'Horas',
             'diamantes': 'Diamantes',
             'nivel': 'Nivel',
@@ -1179,26 +1202,26 @@ def mostrar_vista_jugadores(token_data):
         return df_show
     
     with tab1:
-        st.caption(f"📊 {len(df)} usuarios")
+        st.caption(f"ðŸ“Š {len(df)} usuarios")
         st.dataframe(formatear_dataframe_jugadores(df.sort_values('diamantes', ascending=False)), 
                     use_container_width=True, hide_index=True, height=500)
     
     with tab2:
         df_cumplen = df[df['cumple'] == 'SI']
-        st.caption(f"✅ {len(df_cumplen)} cumplen")
+        st.caption(f"âœ… {len(df_cumplen)} cumplen")
         if not df_cumplen.empty:
             st.dataframe(formatear_dataframe_jugadores(df_cumplen.sort_values('diamantes', ascending=False)), 
                         use_container_width=True, hide_index=True, height=500)
     
     with tab3:
         df_no = df[df['cumple'] == 'NO']
-        st.caption(f"❌ {len(df_no)} no cumplen")
+        st.caption(f"âŒ {len(df_no)} no cumplen")
         if not df_no.empty:
             st.dataframe(formatear_dataframe_jugadores(df_no.sort_values('diamantes', ascending=False)), 
                         use_container_width=True, hide_index=True, height=500)
     
     with tab4:
-        st.markdown("### 📈 Métricas")
+        st.markdown("### ðŸ“ˆ MÃ©tricas")
         
         total = len(df)
         cumplen = len(df[df['cumple'] == 'SI'])
@@ -1206,13 +1229,13 @@ def mostrar_vista_jugadores(token_data):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("👥 Total", total)
+            st.metric("ðŸ‘¥ Total", total)
         
         with col2:
-            st.metric("✅ Cumplen", cumplen)
+            st.metric("âœ… Cumplen", cumplen)
         
         with col3:
-            st.metric("💎 Diamantes", f"{df['diamantes'].sum():,.0f}")
+            st.metric("ðŸ’Ž Diamantes", f"{df['diamantes'].sum():,.0f}")
         
         st.divider()
         
@@ -1238,9 +1261,9 @@ def main():
             mostrar_vista_jugadores(token_data)
             return
         
-        # Si no es válido
-        st.error("❌ Token inválido")
-        if st.button("← Volver"):
+        # Si no es vÃ¡lido
+        st.error("âŒ Token invÃ¡lido")
+        if st.button("â† Volver"):
             st.query_params.clear()
             st.rerun()
         st.stop()
@@ -1258,7 +1281,7 @@ def main():
         if token_data:
             mostrar_panel_admin(token_data)
         else:
-            st.error("❌ Sesión expirada")
+            st.error("âŒ SesiÃ³n expirada")
             st.session_state.clear()
             st.rerun()
     
@@ -1266,15 +1289,16 @@ def main():
         agente_data = st.session_state.get('agente_data')
         
         if agente_data:
-            # Verificar si necesita cambiar contraseña
+            # Verificar si necesita cambiar contraseÃ±a
             if not agente_data.get('cambio_password', False):
                 mostrar_cambio_password(agente_data)
             else:
                 mostrar_vista_agente(agente_data)
         else:
-            st.error("❌ Sesión expirada")
+            st.error("âŒ SesiÃ³n expirada")
             st.session_state.clear()
             st.rerun()
 
 if __name__ == "__main__":
     main()
+
