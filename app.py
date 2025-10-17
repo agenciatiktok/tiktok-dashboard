@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-16a-CACHE-FIX")
+st.sidebar.caption("🔧 Build: 2025-10-16-FIX")
 
 # ============================================================================
 # ESTILOS CSS
@@ -215,7 +215,6 @@ def obtener_periodos_disponibles():
     supabase = get_supabase()
     
     # 🔥 SOLUCIÓN DEFINITIVA: Traer TODOS ordenados descendente
-    # y tomar solo los primeros 10000 (suficiente para años de datos)
     resultado = supabase.table('usuarios_tiktok')\
         .select('fecha_datos')\
         .order('fecha_datos', desc=True)\
