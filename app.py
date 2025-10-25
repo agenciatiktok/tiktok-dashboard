@@ -1,7 +1,7 @@
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
-# Build: 2025-10-15d - CORREGIDO: Lee de resumen_contratos
+# Build: 2025-10-20a - Oculta diamantes + Ordena por días + Debug comentado
 # ============================================================================
 
 import streamlit as st
@@ -26,12 +26,12 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-17-FINAL")
+st.sidebar.caption("🔧 Build: 2025-10-20a")
 
-# Botón para forzar recarga
-if st.sidebar.button("🔄 Forzar Recarga de Periodos"):
-    st.cache_data.clear()
-    st.rerun()
+# DEBUG: Descomentar si necesitas forzar recarga
+# if st.sidebar.button("🔄 Forzar Recarga de Periodos"):
+#     st.cache_data.clear()
+#     st.rerun()
 
 # ============================================================================
 # ESTILOS CSS
@@ -230,11 +230,14 @@ def obtener_periodos_disponibles():
             if resultado_rpc.data:
                 fechas = [r['fecha_datos'] for r in resultado_rpc.data]
                 fechas_filtradas = filtrar_fechas_inteligente(fechas)
-                st.sidebar.success(f"✅ Usando RPC: {len(fechas_filtradas)} fechas visibles")
-                st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
+                # DEBUG: Descomentar para ver info de fechas
+                # st.sidebar.success(f"✅ Usando RPC: {len(fechas_filtradas)} fechas visibles")
+                # st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
                 return fechas_filtradas
         except Exception as e_rpc:
-            st.sidebar.warning(f"⚠️ RPC no disponible: {str(e_rpc)}")
+            # DEBUG: Descomentar para ver errores de RPC
+            # st.sidebar.warning(f"⚠️ RPC no disponible: {str(e_rpc)}")
+            pass
         
         # OPCIÓN B: Paginación manual (fallback)
         todas_fechas = set()
@@ -265,9 +268,10 @@ def obtener_periodos_disponibles():
         fechas_unicas = list(todas_fechas)
         fechas_filtradas = filtrar_fechas_inteligente(fechas_unicas)
         
-        st.sidebar.success(f"✅ Paginación: {len(fechas_filtradas)} fechas visibles")
-        st.sidebar.write(f"📦 Procesados {batch_count} batches")
-        st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
+        # DEBUG: Descomentar para ver info de paginación
+        # st.sidebar.success(f"✅ Paginación: {len(fechas_filtradas)} fechas visibles")
+        # st.sidebar.write(f"📦 Procesados {batch_count} batches")
+        # st.sidebar.write("📋 Fechas mostradas:", fechas_filtradas)
         
         return fechas_filtradas
         
@@ -1202,12 +1206,23 @@ def mostrar_vista_jugadores(token_data):
         """Formatea con columnas ocultas usando aliases"""
         # Mapeo de configuración a columnas reales
         mapeo_ocultar = {
+            # Incentivos
             'coins': 'incentivo_coins',
             'incentivo_coins': 'incentivo_coins',
             'paypal': 'incentivo_paypal',
             'incentivo_paypal': 'incentivo_paypal',
             'sueldo': 'paypal_bruto',
-            'paypal_bruto': 'paypal_bruto'
+            'paypal_bruto': 'paypal_bruto',
+            'coins_bruto': 'coins_bruto',
+            # Métricas básicas
+            'diamantes': 'diamantes',
+            'dias': 'dias',
+            'duracion': 'duracion',
+            'horas': 'duracion',
+            'nivel': 'nivel',
+            'cumple': 'cumple',
+            # Usuario
+            'usuario': 'usuario'
         }
         
         columnas_a_ocultar = set(['agencia'])  # Siempre ocultar agencia en vista jugadores
@@ -1253,21 +1268,21 @@ def mostrar_vista_jugadores(token_data):
     
     with tab1:
         st.caption(f"📊 {len(df)} usuarios")
-        st.dataframe(formatear_dataframe_jugadores(df.sort_values('diamantes', ascending=False)), 
+        st.dataframe(formatear_dataframe_jugadores(df.sort_values('dias', ascending=False)), 
                     use_container_width=True, hide_index=True, height=500)
     
     with tab2:
         df_cumplen = df[df['cumple'] == 'SI']
         st.caption(f"✅ {len(df_cumplen)} cumplen")
         if not df_cumplen.empty:
-            st.dataframe(formatear_dataframe_jugadores(df_cumplen.sort_values('diamantes', ascending=False)), 
+            st.dataframe(formatear_dataframe_jugadores(df_cumplen.sort_values('dias', ascending=False)), 
                         use_container_width=True, hide_index=True, height=500)
     
     with tab3:
         df_no = df[df['cumple'] == 'NO']
         st.caption(f"❌ {len(df_no)} no cumplen")
         if not df_no.empty:
-            st.dataframe(formatear_dataframe_jugadores(df_no.sort_values('diamantes', ascending=False)), 
+            st.dataframe(formatear_dataframe_jugadores(df_no.sort_values('dias', ascending=False)), 
                         use_container_width=True, hide_index=True, height=500)
     
     with tab4:
