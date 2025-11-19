@@ -1153,6 +1153,16 @@ def mostrar_vista_jugadores(token_data):
     
     st.divider()
     
+    # Mensaje de días de actualización
+    st.warning("""
+    ### 📅 Días de Actualización de Datos
+    
+    **Los datos se actualizan los días: 8, 15, 22, 25 y al cierre del mes en curso.**
+    
+    ⚠️ **IMPORTANTE:** Debes visitar esta página regularmente para verificar tu información actualizada.  
+    Los datos se refrescan en estas fechas específicas, así que revisa tu progreso constantemente.
+    """)
+    
     st.info("""
     ### 🎁 Sobre tus Regalos del Mes (Incentivos)
     
