@@ -1,7 +1,7 @@
 # ============================================================================
 # app.py - Sistema Completo TikTok Live
 # Pantalla pública + Login Admin + Login Agente + Vista Jugadores
-# Build: 2025-10-20a - Oculta diamantes + Ordena por días + Debug comentado
+# Build: 2025-11-19a - Mejora legibilidad métricas + Mensaje días actualización
 # ============================================================================
 
 import streamlit as st
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # Build tracking
-st.sidebar.caption("🔧 Build: 2025-10-20a")
+st.sidebar.caption("🔧 Build: 2025-11-19a")
 
 # DEBUG: Descomentar si necesitas forzar recarga
 # if st.sidebar.button("🔄 Forzar Recarga de Periodos"):
@@ -44,28 +44,36 @@ st.markdown("""
         --tiktok-cyan: #00f2ea;
         --tiktok-pink: #fe2c55;
         --tiktok-white: #ffffff;
+        --metric-bg: #1a1a1a;
     }
     
     .stApp {
         background-color: var(--tiktok-black);
     }
     
+    /* Métricas mejoradas - Fondo sólido con borde brillante */
     .stMetric {
-        background: linear-gradient(135deg, var(--tiktok-cyan) 0%, var(--tiktok-pink) 100%);
-        padding: 15px;
-        border-radius: 10px;
-        color: var(--tiktok-white);
+        background: var(--metric-bg);
+        border: 2px solid;
+        border-image: linear-gradient(135deg, var(--tiktok-cyan) 0%, var(--tiktok-pink) 100%) 1;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 242, 234, 0.2);
     }
     
     .stMetric label {
-        color: var(--tiktok-white) !important;
+        color: var(--tiktok-cyan) !important;
         font-weight: bold;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     
     .stMetric [data-testid="stMetricValue"] {
         color: var(--tiktok-white);
-        font-size: 28px;
+        font-size: 32px;
         font-weight: bold;
+        text-shadow: 0 2px 4px rgba(0, 242, 234, 0.3);
     }
     
     h1, h2, h3 {
