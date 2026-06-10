@@ -567,12 +567,33 @@ def obtener_columnas_ocultas(contrato: str):
 # FUNCIONES DE DATOS
 # ============================================================================
 
+def obtener_contrato_equivalente(supabase, contrato):
+    """Busca si el contrato tiene un equivalente en contratos_equivalencias (A↔B)."""
+    try:
+        # Buscar como nexus_codigo
+        r = supabase.table('contratos_equivalencias')\
+            .select('nexus_codigo,vertex_codigo')\
+            .or_(f'nexus_codigo.eq.{contrato},vertex_codigo.eq.{contrato}')\
+            .execute()
+        if r.data:
+            row = r.data[0]
+            # Devolver el otro lado
+            if row['nexus_codigo'] == contrato:
+                return row['vertex_codigo']
+            else:
+                return row['nexus_codigo']
+    except Exception:
+        pass
+    return None
+
+
 def obtener_datos_contrato(contrato, fecha_datos):
     """
-    MEJORADO CON ENRIQUECIMIENTO
-    Obtiene datos del contrato desde usuarios_tiktok, 
+    MEJORADO CON ENRIQUECIMIENTO + INTEGRACIÓN VERTEX
+    Obtiene datos del contrato desde usuarios_tiktok,
     enriquece nombres desde histórico,
-    y mapea paypal_bruto desde reportes_contratos
+    mapea paypal_bruto desde reportes_contratos,
+    y une datos del contrato equivalente (A↔B) si existe.
     """
     supabase = get_supabase()
     
@@ -586,13 +607,24 @@ def obtener_datos_contrato(contrato, fecha_datos):
             nivel1_tabla3 = valor.upper() in ['SI', 'YES', 'TRUE', '1', 'SÍ']
         else:
             nivel1_tabla3 = bool(valor)
-    
+
+    # Buscar contrato equivalente (Nexus ↔ Vertex)
+    contrato_equivalente = obtener_contrato_equivalente(supabase, contrato)
+
     # Obtener datos base de usuarios_tiktok
-    resultado = supabase.table('usuarios_tiktok')\
-        .select('*')\
-        .eq('contrato', contrato)\
-        .eq('fecha_datos', fecha_datos)\
-        .execute()
+    # Si hay equivalente, traer ambos contratos en una sola query
+    if contrato_equivalente:
+        resultado = supabase.table('usuarios_tiktok')\
+            .select('*')\
+            .in_('contrato', [contrato, contrato_equivalente])\
+            .eq('fecha_datos', fecha_datos)\
+            .execute()
+    else:
+        resultado = supabase.table('usuarios_tiktok')\
+            .select('*')\
+            .eq('contrato', contrato)\
+            .eq('fecha_datos', fecha_datos)\
+            .execute()
     
     if resultado.data:
         df = pd.DataFrame(resultado.data)
@@ -636,25 +668,33 @@ def obtener_datos_contrato(contrato, fecha_datos):
         # Limpiar valores para no cumplen
         df.loc[df['cumple'] == 'NO', ['incentivo_coins', 'incentivo_paypal']] = 0
         
-        # ✨ OBTENER paypal_bruto desde reportes_contratos
+        # ✨ OBTENER paypal_bruto desde reportes_contratos (ambos contratos si hay equivalente)
         try:
+            contratos_buscar = [contrato]
+            if contrato_equivalente:
+                contratos_buscar.append(contrato_equivalente)
+
             reportes = supabase.table('reportes_contratos')\
                 .select('usuario_id, paypal_bruto')\
-                .eq('contrato', contrato)\
+                .in_('contrato', contratos_buscar)\
                 .eq('periodo', fecha_datos)\
                 .execute()
-            
+
             if reportes.data:
                 df_reportes = pd.DataFrame(reportes.data)
                 df['id_tiktok_str'] = df['id_tiktok'].astype(str)
                 df_reportes['usuario_id_str'] = df_reportes['usuario_id'].astype(str)
-                
+
                 paypal_map = dict(zip(df_reportes['usuario_id_str'], df_reportes['paypal_bruto']))
-                
-                df['paypal_bruto'] = df['id_tiktok_str'].map(paypal_map).fillna(0)
+
+                df['paypal_bruto'] = df['id_tiktok_str'].map(paypal_map).fillna(
+                    df.get('paypal_bruto', pd.Series(0, index=df.index))
+                )
                 df = df.drop('id_tiktok_str', axis=1)
             else:
-                df['paypal_bruto'] = 0
+                # Para jugadores de Vertex usar sueldo ya calculado si existe
+                if 'paypal_bruto' not in df.columns:
+                    df['paypal_bruto'] = 0
         except Exception:
             df['paypal_bruto'] = 0
         
