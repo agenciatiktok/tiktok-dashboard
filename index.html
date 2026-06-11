@@ -136,9 +136,26 @@
             <span class="periodo-label">Periodo:</span>
             <select id="periodo-select" onchange="cambiarPeriodo(this.value)"></select>
         </div>
-        <div class="info-box">
-            <strong>Actualización:</strong> días 8, 15, 22, 25 y cierre de mes.<br>
-            <strong>Regalos:</strong> se procesan entre el día 15 y 25 del mes siguiente.
+                <div class="info-box">
+            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                <strong style="color: var(--cyan); display: block; margin-bottom: 4px;">📅 CONTROL DE CORTES:</strong>
+                Actualización de datos los días <b>8, 15, 22, 25 y cierre de mes</b>. Es obligación y responsabilidad estricta del jugador estar pendiente de sus estadísticas en estas fechas para reportar cualquier anomalía a tiempo.
+            </div>
+            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                <strong style="color: var(--pink); display: block; margin-bottom: 4px;">🎁 PROCESAMIENTO DE INCENTIVOS:</strong>
+                Los regalos e incentivos se procesan y liquidan estrictamente entre el <b>día 20 y 30 del mes siguiente</b>.
+            </div>
+            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                <strong style="color: #ffcc00; display: block; margin-bottom: 4px;">⚠️ REGLA ANTI-ACUMULACIÓN (NO ACUMULABLE):</strong>
+                Los premios <b>NO se acumulan entre meses</b>. Tienes un plazo máximo de 30 días tras el cierre del periodo para validar tu estatus o reclamar tu incentivo. Evita la acumulación de meses; estadísticas viejas no reclamadas dentro del periodo expiran y se pierden definitivamente sin derecho a reclamación.
+            </div>
+            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                <strong style="color: #22c55e; display: block; margin-bottom: 4px;">💬 SOPORTE GENERAL:</strong>
+                Para dudas, comentarios o aclaraciones sobre tus métricas, contacta a tu agente asignado o haz clic aquí para ir al <a href="https://wa.me/5215659842514" target="_blank" style="color: #22c55e; font-weight: bold; text-decoration: underline;">WhatsApp de la Administración General (+52 1 56 5984 2514)</a>.
+            </div>
+            <div style="font-size: 11px; line-height: 1.4; color: var(--muted); padding-top: 4px;">
+                <i><b>Nota sobre Métricas:</b> Los datos aquí mostrados corresponden a los reportes oficiales descargados de la plataforma TikTok LIVE. Las horas y días válidos se calculan bajo el huso horario estándar de la plataforma (UTC+0). Cualquier diferencia menor con tu panel de la app se debe al desfase de tu zona horaria local.</i>
+            </div>
         </div>
         <div class="tabs">
             <div class="tab active" onclick="filtrar('todos',this)">Todos</div>
@@ -336,3 +353,4 @@ function filtrar(tipo,el){filtroActual=tipo;document.querySelectorAll('.tab').fo
 function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}</script>
 </body>
 </html>
+
