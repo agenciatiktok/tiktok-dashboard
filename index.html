@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -147,11 +147,11 @@
             </div>
             <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
                 <strong style="color: #ffcc00; display: block; margin-bottom: 4px;">⚠️ REGLA ANTI-ACUMULACIÓN (NO ACUMULABLE):</strong>
-                Los premios <b>NO se acumulan entre meses</b>. Tienes un plazo máximo de 30 días tras el cierre del periodo para validar tu estatus o reclamar tu incentivo. Evita la acumulación de meses; estadísticas viejas no reclamadas dentro del periodo expiran y se pierden definitivamente sin derecho a reclamación.
+                Los premios <b>NO se acumulan entre meses</b>. Tienes un plazo máximo de 30 días tras el cierre del periodo para validar tu estatus o reclamar tu incentivo. Estadísticas viejas no reclamadas dentro del periodo expiran y se pierden sin derecho a reclamación.
             </div>
             <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
                 <strong style="color: #22c55e; display: block; margin-bottom: 4px;">💬 SOPORTE GENERAL:</strong>
-                Para dudas, comentarios o aclaraciones sobre tus métricas, contacta a tu agente asignado o haz clic aquí para ir al <a href="https://wa.me/5215659842514" target="_blank" style="color: #22c55e; font-weight: bold; text-decoration: underline;">WhatsApp de la Administración General (+52 1 56 5984 2514)</a>.
+                Para dudas o aclaraciones sobre tus métricas, contacta a tu agente asignado o haz clic aquí para ir al <a href="https://wa.me/5215659842514" target="_blank" style="color: #22c55e; font-weight: bold; text-decoration: underline;">WhatsApp de la Administración General (+52 1 56 5984 2514)</a>.
             </div>
             <div style="font-size: 11px; line-height: 1.4; color: var(--muted); padding-top: 4px;">
                 <i><b>Nota sobre Métricas:</b> Los datos aquí mostrados corresponden a los reportes oficiales descargados de la plataforma TikTok LIVE. Las horas y días válidos se calculan bajo el huso horario estándar de la plataforma (UTC+0). Cualquier diferencia menor con tu panel de la app se debe al desfase de tu zona horaria local.</i>
@@ -178,13 +178,12 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let contrato = null, contratoEquiv = null, nombreContrato = '';
-let columnaOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro = true;
+let columnasOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro = true;
+let esVertex = false; // true si contrato empieza con B
 
 window.onload = async function() {
     const token = new URLSearchParams(window.location.search).get('token');
-    if (token) {
-        await validarYEntrar(token);
-    }
+    if (token) await validarYEntrar(token);
 };
 
 async function entrarConToken() {
@@ -203,6 +202,7 @@ async function validarYEntrar(token) {
     if (!data) { document.getElementById('token-error').textContent = 'Token inválido o inactivo.'; return; }
     contrato = data.contrato;
     nombreContrato = data.nombre || contrato;
+    esVertex = contrato.startsWith('B');
     const url = new URL(window.location);
     url.searchParams.set('token', token);
     window.history.replaceState({}, '', url);
@@ -213,11 +213,12 @@ async function iniciarApp() {
     document.getElementById('token-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     document.getElementById('header-nombre').textContent = nombreContrato;
+    // Detectar contrato equivalente A↔B
     const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
     if (eq) {
         contratoEquiv = eq.nexus_codigo === contrato ? eq.vertex_codigo : eq.nexus_codigo;
     }
-    columnaOcultas = await obtenerColumnasOcultas();
+    columnasOcultas = await obtenerColumnasOcultas();
     const periodos = await obtenerPeriodos();
     const sel = document.getElementById('periodo-select');
     sel.innerHTML = '';
@@ -237,7 +238,9 @@ async function iniciarApp() {
 async function obtenerColumnasOcultas() {
     const { data } = await sb.from('config_columnas_ocultas').select('columna,contrato');
     if (!data) return [];
-    return data.filter(r => !r.contrato || r.contrato === contrato || r.contrato === contratoEquiv).map(r => r.columna?.toLowerCase());
+    return data
+        .filter(r => !r.contrato || r.contrato === contrato || r.contrato === contratoEquiv)
+        .map(r => r.columna?.toLowerCase());
 }
 
 async function obtenerPeriodos() {
@@ -281,19 +284,55 @@ async function cargarDatos(periodo) {
     const msg = '<div class="center-msg"><span class="spinner"></span> Cargando datos...</div>';
     document.getElementById('cards-container').innerHTML = msg;
     document.getElementById('tabla-container').innerHTML = msg;
+
     const contratos = contratoEquiv ? [contrato, contratoEquiv] : [contrato];
-    let todos = [];
+    let baseRows = [];
+
+    // Paso 1: leer datos base de usuarios_tiktok
     for (const c of contratos) {
         let off = 0;
         while (true) {
-            const { data } = await sb.from('usuarios_tiktok').select('usuario,dias,duracion,diamantes,nivel,cumple').eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
+            const { data } = await sb.from('usuarios_tiktok')
+                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto')
+                .eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
             if (!data || !data.length) break;
-            todos = todos.concat(data);
+            baseRows = baseRows.concat(data);
             if (data.length < 1000) break;
             off += 1000;
         }
     }
-    todosLosDatos = todos.sort((a,b) => (b.dias||0)-(a.dias||0));
+
+    // Paso 2: para contratos A (Nexus), enriquecer con montos de reportes_contratos
+    // Los B ya traen paypal_bruto de usuarios_tiktok (subido por VERTEX_SUBIR_SUPABASE)
+    // Los A tienen los montos en reportes_contratos
+    const contratosA = contratos.filter(c => c.startsWith('A'));
+    let reportesMap = {}; // usuario → {paypal_bruto, paypal_incentivo, coins_bruto, coins_incentivo}
+
+    for (const c of contratosA) {
+        let off = 0;
+        while (true) {
+            const { data } = await sb.from('reportes_contratos')
+                .select('usuario,paypal_bruto,paypal_incentivo,coins_bruto,coins_incentivo')
+                .eq('contrato',c).eq('periodo',periodo).range(off, off+999);
+            if (!data || !data.length) break;
+            data.forEach(r => { reportesMap[r.usuario] = r; });
+            if (data.length < 1000) break;
+            off += 1000;
+        }
+    }
+
+    // Paso 3: fusionar
+    todosLosDatos = baseRows.map(r => {
+        const rep = reportesMap[r.usuario];
+        return {
+            ...r,
+            paypal_bruto:      rep ? parseFloat(rep.paypal_bruto||0)      : parseFloat(r.paypal_bruto||0),
+            paypal_incentivo:  rep ? parseFloat(rep.paypal_incentivo||0)  : 0,
+            coins_bruto:       rep ? parseFloat(rep.coins_bruto||0)       : 0,
+            coins_incentivo:   rep ? parseFloat(rep.coins_incentivo||0)   : 0,
+        };
+    }).sort((a,b) => (b.dias||0)-(a.dias||0));
+
     actualizarStats();
     renderVistas();
 }
@@ -317,17 +356,28 @@ function renderVistas() {
         return;
     }
 
-    const ocultarDiamantes = columnaOcultas.includes('diamantes');
+    const ocDiamantes    = columnasOcultas.includes('diamantes');
+    const ocPaypal       = columnasOcultas.includes('paypal') || columnasOcultas.includes('sueldo');
+    const ocCoins        = columnasOcultas.includes('coins');
+    const ocPaypalInc    = columnasOcultas.includes('paypal_incentivo');
+    const ocCoinsInc     = columnasOcultas.includes('coins_incentivo');
 
+    // ── TARJETAS (móvil) ──
     let cards = '';
     rows.forEach(r => {
         const c = cumpleTrue(r.cumple);
         const lv = nivelLabel(r.nivel);
-        
-        let d_block = '';
-        if (!ocultarDiamantes) {
-            d_block = `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</div></div>`;
-        }
+        let extras = '';
+        if (!ocDiamantes && r.diamantes != null)
+            extras += `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${Number(r.diamantes).toLocaleString('es-MX')}</div></div>`;
+        if (!ocPaypal && r.paypal_bruto > 0)
+            extras += `<div class="card-item"><div class="card-item-label">PayPal</div><div class="card-item-val">$${Number(r.paypal_bruto).toFixed(2)}</div></div>`;
+        if (!ocCoins && r.coins_bruto > 0)
+            extras += `<div class="card-item"><div class="card-item-label">Coins</div><div class="card-item-val">${Number(r.coins_bruto).toLocaleString('es-MX')}</div></div>`;
+        if (!ocPaypalInc && r.paypal_incentivo > 0)
+            extras += `<div class="card-item"><div class="card-item-label">Incentivo $</div><div class="card-item-val">$${Number(r.paypal_incentivo).toFixed(2)}</div></div>`;
+        if (!ocCoinsInc && r.coins_incentivo > 0)
+            extras += `<div class="card-item"><div class="card-item-label">Incentivo 🪙</div><div class="card-item-val">${Number(r.coins_incentivo).toLocaleString('es-MX')}</div></div>`;
 
         cards += `<div class="player-card">
             <div class="card-top">
@@ -338,26 +388,32 @@ function renderVistas() {
                 <div class="card-item"><div class="card-item-label">Días</div><div class="card-item-val">${r.dias??'—'}</div></div>
                 <div class="card-item"><div class="card-item-label">Horas</div><div class="card-item-val" style="font-size:11px">${r.duracion||'—'}</div></div>
                 <div class="card-item"><div class="card-item-label">Nivel</div><div class="card-item-val">${lv}</div></div>
-                ${d_block}
+                ${extras}
             </div>
         </div>`;
     });
     document.getElementById('cards-container').innerHTML = cards;
 
-    let table_th = ocultarDiamantes ? '' : '<th>Diamantes</th>';
-    let tabla = `<table><thead><tr><th>Usuario</th><th>Días</th><th>Horas</th>${table_th}<th>Nivel</th><th>Cumple</th></tr></thead><tbody>`;
+    // ── TABLA (desktop) ──
+    let ths = '<th>Usuario</th><th>Días</th><th>Horas</th>';
+    if (!ocDiamantes) ths += '<th>Diamantes</th>';
+    if (!ocPaypal)    ths += '<th>PayPal</th>';
+    if (!ocCoins)     ths += '<th>Coins</th>';
+    if (!ocPaypalInc) ths += '<th>Inc $</th>';
+    if (!ocCoinsInc)  ths += '<th>Inc 🪙</th>';
+    ths += '<th>Nivel</th><th>Cumple</th>';
+
+    let tabla = `<table><thead><tr>${ths}</tr></thead><tbody>`;
     rows.forEach(r => {
         const c = cumpleTrue(r.cumple);
-        let table_td = ocultarDiamantes ? '' : `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
-        
-        tabla += `<tr>
-            <td>${esc(r.usuario||'—')}</td>
-            <td>${r.dias??'—'}</td>
-            <td>${r.duracion||'—'}</td>
-            ${table_td}
-            <td>${nivelLabel(r.nivel)}</td>
-            <td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>
-        </tr>`;
+        let tds = `<td>${esc(r.usuario||'—')}</td><td>${r.dias??'—'}</td><td>${r.duracion||'—'}</td>`;
+        if (!ocDiamantes) tds += `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
+        if (!ocPaypal)    tds += `<td>${r.paypal_bruto>0?'$'+Number(r.paypal_bruto).toFixed(2):'—'}</td>`;
+        if (!ocCoins)     tds += `<td>${r.coins_bruto>0?Number(r.coins_bruto).toLocaleString('es-MX'):'—'}</td>`;
+        if (!ocPaypalInc) tds += `<td>${r.paypal_incentivo>0?'$'+Number(r.paypal_incentivo).toFixed(2):'—'}</td>`;
+        if (!ocCoinsInc)  tds += `<td>${r.coins_incentivo>0?Number(r.coins_incentivo).toLocaleString('es-MX'):'—'}</td>`;
+        tds += `<td>${nivelLabel(r.nivel)}</td><td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>`;
+        tabla += `<tr>${tds}</tr>`;
     });
     tabla += '</tbody></table>';
     document.getElementById('tabla-container').innerHTML = tabla;
@@ -380,6 +436,7 @@ const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','
 function formatFecha(f){const d=new Date(f+'T00:00:00');return `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`;}
 async function cambiarPeriodo(p){await cargarDatos(p);}
 function filtrar(tipo,el){filtroActual=tipo;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderVistas();}
-function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}</script>
+function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}
+</script>
 </body>
 </html>
