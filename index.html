@@ -302,6 +302,57 @@ function renderVistas() {
         document.getElementById('tabla-container').innerHTML = msg;
         return;
     }
+
+    // Verificar qué columnas están apagadas en Supabase para este contrato
+    const ocultarDiamantes = columnaOcultas.includes('diamantes');
+
+    // CARDS (móvil)
+    let cards = '';
+    rows.forEach(r => {
+        const c = cumpleTrue(r.cumple);
+        const lv = nivelLabel(r.nivel);
+        
+        // Bloque dinámico de diamantes para celular
+        let d_block = '';
+        if (!ocultarDiamantes) {
+            d_block = `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</div></div>`;
+        }
+
+        cards += `<div class="player-card">
+            <div class="card-top">
+                <div class="card-user">${esc(r.usuario||'—')}</div>
+                <span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span>
+            </div>
+            <div class="card-grid">
+                <div class="card-item"><div class="card-item-label">Días</div><div class="card-item-val">${r.dias??'—'}</div></div>
+                <div class="card-item"><div class="card-item-label">Horas</div><div class="card-item-val" style="font-size:11px">${r.duracion||'—'}</div></div>
+                <div class="card-item"><div class="card-item-label">Nivel</div><div class="card-item-val">${lv}</div></div>
+                ${d_block}
+            </div>
+        </div>`;
+    });
+    document.getElementById('cards-container').innerHTML = cards;
+
+    // TABLA (desktop)
+    let th_diamantes = ocultarDiamantes ? '' : '<th>Diamantes</th>';
+    
+    let tabla = `<table><thead><tr><th>Usuario</th><th>Días</th><th>Horas</th>${th_diamantes}<th>Nivel</th><th>Cumple</th></tr></thead><tbody>`;
+    rows.forEach(r => {
+        const c = cumpleTrue(r.cumple);
+        let td_diamantes = ocultarDiamantes ? '' : `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
+        
+        tabla += `<tr>
+            <td>${esc(r.usuario||'—')}</td>
+            <td>${r.dias??'—'}</td>
+            <td>${r.duracion||'—'}</td>
+            ${td_diamantes}
+            <td>${nivelLabel(r.nivel)}</td>
+            <td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>
+        </tr>`;
+    });
+    tabla += '</tbody></table>';
+    document.getElementById('tabla-container').innerHTML = tabla;
+}
     let cards = '';
     rows.forEach(r => {
         const c = cumpleTrue(r.cumple);
@@ -353,4 +404,5 @@ function filtrar(tipo,el){filtroActual=tipo;document.querySelectorAll('.tab').fo
 function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}</script>
 </body>
 </html>
+
 
