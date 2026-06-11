@@ -1,657 +1,338 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TikTok Live — Mi Progreso</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-  /* ── TOKENS ── */
-  :root {
-    --bg:       #0a0a0a;
-    --surface:  #141414;
-    --surface2: #1e1e1e;
-    --border:   rgba(255,255,255,0.07);
-    --text:     #ffffff;
-    --muted:    #888888;
-    --cyan:     #00f2ea;
-    --pink:     #fe2c55;
-    --green:    rgba(37,244,238,0.12);
-    --red:      rgba(255,77,103,0.12);
-    --green-t:  #25f4ee;
-    --red-t:    #ff4d67;
-    --radius:   10px;
-    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  }
-  body.light {
-    --bg:       #f2f2f2;
-    --surface:  #ffffff;
-    --surface2: #ebebeb;
-    --border:   rgba(0,0,0,0.09);
-    --text:     #111111;
-    --muted:    #666666;
-    --green:    rgba(0,180,170,0.10);
-    --red:      rgba(220,50,70,0.10);
-    --green-t:  #00918b;
-    --red-t:    #cc2a3e;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 14px;
-    min-height: 100vh;
-    transition: background .2s, color .2s;
-  }
-
-  /* ── HEADER ── */
-  .header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  .header-left { display: flex; align-items: center; gap: 10px; }
-  .logo {
-    width: 32px; height: 32px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--cyan), var(--pink));
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 14px; color: #000; flex-shrink: 0;
-  }
-  .header-name { font-size: 15px; font-weight: 500; }
-  .header-sub  { font-size: 12px; color: var(--muted); margin-top: 1px; }
-  .header-right { display: flex; align-items: center; gap: 10px; }
-  .theme-btn {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    padding: 6px 14px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 12px;
-    font-family: var(--font);
-    display: flex; align-items: center; gap: 5px;
-    transition: color .15s;
-  }
-  .theme-btn:hover { color: var(--text); }
-
-  /* ── MAIN ── */
-  .main { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
-
-  /* ── STATS ── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .stat {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-  }
-  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 5px; }
-  .stat-val   { font-size: 24px; font-weight: 500; }
-  .c-cyan { color: var(--cyan); }
-  .c-pink { color: var(--pink); }
-
-  /* ── PERIODO SELECTOR ── */
-  .periodo-row {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 16px;
-  }
-  .periodo-label { font-size: 12px; color: var(--muted); }
-  select {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 13px;
-    padding: 7px 14px;
-    border-radius: 20px;
-    cursor: pointer;
-    outline: none;
-    transition: border-color .15s;
-  }
-  select:hover  { border-color: rgba(0,242,234,.4); }
-  select:focus  { border-color: var(--cyan); }
-
-  /* ── TABS ── */
-  .tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 16px;
-    gap: 0;
-  }
-  .tab {
-    padding: 9px 16px;
-    font-size: 13px;
-    color: var(--muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: color .15s, border-color .15s;
-    user-select: none;
-  }
-  .tab.active  { color: var(--cyan); border-color: var(--cyan); }
-  .tab:hover:not(.active) { color: var(--text); }
-
-  /* ── TABLE ── */
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th {
-    color: var(--muted);
-    font-weight: 500;
-    text-align: left;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-    white-space: nowrap;
-  }
-  td {
-    padding: 11px 12px;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  tbody tr:last-child td { border-bottom: none; }
-  tbody tr:hover td { background: var(--surface2); }
-
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 500;
-  }
-  .badge-si  { background: var(--green); color: var(--green-t); }
-  .badge-no  { background: var(--red);   color: var(--red-t);   }
-
-  .lv { display: inline-flex; align-items: center; gap: 5px; }
-  .dot {
-    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-  }
-  .dot-lv3 { background: #FFD700; }
-  .dot-lv2 { background: #C0C0C0; }
-  .dot-lv1 { background: #CD7F32; }
-  .dot-lv0 { background: #444; }
-
-  /* ── EMPTY / ERROR / LOADING ── */
-  .center-msg {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--muted);
-  }
-  .center-msg b { display: block; font-size: 16px; color: var(--text); margin-bottom: 8px; }
-
-  /* ── TOKEN SCREEN ── */
-  #token-screen {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
-  }
-  .token-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 40px 32px;
-    width: 100%;
-    max-width: 360px;
-    text-align: center;
-  }
-  .token-logo {
-    width: 56px; height: 56px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--cyan), var(--pink));
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 700; color: #000;
-    margin: 0 auto 20px;
-  }
-  .token-title { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
-  .token-sub   { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
-  .token-input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--font);
-    font-size: 14px;
-    padding: 11px 14px;
-    border-radius: var(--radius);
-    outline: none;
-    margin-bottom: 12px;
-    transition: border-color .15s;
-  }
-  .token-input:focus { border-color: var(--cyan); }
-  .token-btn {
-    width: 100%;
-    background: linear-gradient(135deg, var(--cyan), var(--pink));
-    border: none;
-    color: #000;
-    font-family: var(--font);
-    font-weight: 600;
-    font-size: 14px;
-    padding: 12px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: opacity .15s;
-  }
-  .token-btn:hover   { opacity: .9; }
-  .token-btn:active  { opacity: .75; }
-  .token-error {
-    color: var(--red-t);
-    font-size: 12px;
-    margin-top: 10px;
-    min-height: 18px;
-  }
-
-  /* ── SPINNER ── */
-  .spinner {
-    width: 20px; height: 20px;
-    border: 2px solid var(--border);
-    border-top-color: var(--cyan);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 8px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── INFO BOX ── */
-  .info-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--cyan);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-  .info-box strong { color: var(--text); }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 500px) {
-    .stats-row { grid-template-columns: repeat(3, 1fr); }
-    .stat-val  { font-size: 20px; }
-    th, td     { padding: 8px 8px; font-size: 12px; }
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikTok Live — Mi Progreso</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1e1e1e;
+            --border: rgba(255,255,255,0.07); --text: #ffffff; --muted: #888888;
+            --cyan: #00f2ea; --pink: #fe2c55;
+            --green: rgba(37,244,238,0.12); --red: rgba(255,77,103,0.12);
+            --green-t: #25f4ee; --red-t: #ff4d67; --radius: 10px;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        body.light {
+            --bg: #f2f2f2; --surface: #ffffff; --surface2: #ebebeb;
+            --border: rgba(0,0,0,0.09); --text: #111111; --muted: #666666;
+            --green: rgba(0,180,170,0.10); --red: rgba(220,50,70,0.10);
+            --green-t: #00918b; --red-t: #cc2a3e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg); color: var(--text); font-family: var(--font);
+            font-size: 14px; min-height: 100vh; transition: background .2s, color .2s;
+        }
+        .header {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 10;
+        }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .logo {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--cyan), var(--pink));
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 13px; color: #000; flex-shrink: 0;
+        }
+        .header-name { font-size: 14px; font-weight: 500; line-height: 1.2; }
+        .header-sub { font-size: 11px; color: var(--muted); }
+        .theme-btn {
+            background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+            padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 11px; white-space: nowrap;
+        }
+        .main { max-width: 700px; margin: 0 auto; padding: 14px 12px 40px; }
+        .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+        .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 10px; }
+        .stat-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+        .stat-val { font-size: 22px; font-weight: 500; }
+        .c-cyan { color: var(--cyan); }
+        .c-pink { color: var(--pink); }
+        .periodo-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .periodo-label { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+        select {
+            background: var(--surface); border: 1px solid var(--border); color: var(--text);
+            font-family: var(--font); font-size: 13px; padding: 7px 12px; border-radius: 20px;
+            cursor: pointer; outline: none; flex: 1; max-width: 260px;
+        }
+        select:focus { border-color: var(--cyan); }
+        .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+        .tab { padding: 8px 14px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; user-select: none; }
+        .tab.active { color: var(--cyan); border-color: var(--cyan); }
+        .info-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--cyan); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+        .info-box strong { color: var(--text); }
+        .cards-list { display: flex; flex-direction: column; gap: 8px; }
+        .player-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+        .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .card-user { font-size: 14px; font-weight: 500; word-break: break-all; }
+        .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .card-item { background: var(--surface2); border-radius: 6px; padding: 6px 8px; }
+        .card-item-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+        .card-item-val { font-size: 12px; font-weight: 500; }
+        .table-wrap { display: none; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { color: var(--muted); font-weight: 500; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+        td { padding: 10px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        tbody tr:hover td { background: var(--surface2); }
+        @media(min-width:640px){
+            .cards-list { display: none; }
+            .table-wrap { display: block; }
+            .main { padding: 18px 20px 40px; }
+            .stat-val { font-size: 26px; }
+        }
+        .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+        .badge-si { background: var(--green); color: var(--green-t); }
+        .badge-no { background: var(--red); color: var(--red-t); }
+        .lv { display: inline-flex; align-items: center; gap: 4px; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .dot-lv3 { background: #FFD700; } .dot-lv2 { background: #C0C0C0; }
+        .dot-lv1 { background: #CD7F32; } .dot-lv0 { background: #444; }
+        .center-msg { text-align: center; padding: 50px 20px; color: var(--muted); }
+        .center-msg b { display: block; font-size: 15px; color: var(--text); margin-bottom: 6px; }
+        .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
+        @keyframes spin{to{transform:rotate(360deg);}}
+        #token-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .token-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 36px 28px; width: 100%; max-width: 340px; text-align: center; }
+        .token-logo { width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, var(--cyan), var(--pink)); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; color: #000; margin: 0 auto 18px; }
+        .token-title { font-size: 18px; font-weight: 500; margin-bottom: 5px; }
+        .token-sub { font-size: 13px; color: var(--muted); margin-bottom: 22px; }
+        .token-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: 14px; padding: 11px 14px; border-radius: var(--radius); outline: none; margin-bottom: 12px; }
+        .token-input:focus { border-color: var(--cyan); }
+        .token-btn { width: 100%; background: linear-gradient(135deg, var(--cyan), var(--pink)); border: none; color: #000; font-family: var(--font); font-weight: 600; font-size: 14px; padding: 12px; border-radius: var(--radius); cursor: pointer; }
+        .token-error { color: var(--red-t); font-size: 12px; margin-top: 10px; min-height: 18px; }
+    </style>
 </head>
 <body>
-
-<!-- TOKEN SCREEN (se oculta cuando hay token válido) -->
 <div id="token-screen">
-  <div class="token-card">
-    <div class="token-logo">T</div>
-    <div class="token-title">TikTok Live</div>
-    <div class="token-sub">Ingresa tu token para ver tu progreso</div>
-    <input
-      class="token-input"
-      id="token-input"
-      type="password"
-      placeholder="Token de acceso"
-      autocomplete="off"
-    />
-    <button class="token-btn" onclick="entrarConToken()">Entrar</button>
-    <div class="token-error" id="token-error"></div>
-  </div>
+    <div class="token-card">
+        <div class="token-logo">T</div>
+        <div class="token-title">TikTok Live</div>
+        <div class="token-sub">Ingresa tu token para ver tu progreso</div>
+        <input class="token-input" id="token-input" type="password" placeholder="Token de acceso" autocomplete="off"/>
+        <button class="token-btn" onclick="entrarConToken()">Entrar</button>
+        <div class="token-error" id="token-error"></div>
+    </div>
 </div>
-
-<!-- VISTA PRINCIPAL (oculta hasta validar token) -->
 <div id="app" style="display:none">
-
-  <div class="header">
-    <div class="header-left">
-      <div class="logo" id="logo-inicial">T</div>
-      <div>
-        <div class="header-name" id="header-nombre">—</div>
-        <div class="header-sub"  id="header-sub">—</div>
-      </div>
+    <div class="header">
+        <div class="header-left">
+            <div class="logo" id="logo-inicial">T</div>
+            <div>
+                <div class="header-name" id="header-nombre">—</div>
+                <div class="header-sub" id="header-sub">—</div>
+            </div>
+        </div>
+        <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">☀ Claro</button>
     </div>
-    <div class="header-right">
-      <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">
-        ☀ Modo claro
-      </button>
+    <div class="main">
+        <div class="stats-row">
+            <div class="stat"><div class="stat-label">Total</div><div class="stat-val" id="stat-total">—</div></div>
+            <div class="stat"><div class="stat-label">Cumplen</div><div class="stat-val c-cyan" id="stat-cumplen">—</div></div>
+            <div class="stat"><div class="stat-label">No cumplen</div><div class="stat-val c-pink" id="stat-no">—</div></div>
+        </div>
+        <div class="periodo-row">
+            <span class="periodo-label">Periodo:</span>
+            <select id="periodo-select" onchange="cambiarPeriodo(this.value)"></select>
+        </div>
+        <div class="info-box">
+            <strong>Actualización:</strong> días 8, 15, 22, 25 y cierre de mes.<br>
+            <strong>Regalos:</strong> se procesan entre el día 15 y 25 del mes siguiente.
+        </div>
+        <div class="tabs">
+            <div class="tab active" onclick="filtrar('todos',this)">Todos</div>
+            <div class="tab" onclick="filtrar('si',this)">Cumplen</div>
+            <div class="tab" onclick="filtrar('no',this)">No cumplen</div>
+        </div>
+        <div class="cards-list" id="cards-container">
+            <div class="center-msg"><span class="spinner"></span> Cargando...</div>
+        </div>
+        <div class="table-wrap">
+            <div id="tabla-container">
+                <div class="center-msg"><span class="spinner"></span> Cargando...</div>
+            </div>
+        </div>
     </div>
-  </div>
-
-  <div class="main">
-
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat">
-        <div class="stat-label">Total</div>
-        <div class="stat-val" id="stat-total">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">Cumplen</div>
-        <div class="stat-val c-cyan" id="stat-cumplen">—</div>
-      </div>
-      <div class="stat">
-        <div class="stat-label">No cumplen</div>
-        <div class="stat-val c-pink" id="stat-no">—</div>
-      </div>
-    </div>
-
-    <!-- Periodo -->
-    <div class="periodo-row">
-      <span class="periodo-label">Periodo:</span>
-      <select id="periodo-select" onchange="cambiarPeriodo(this.value)"></select>
-    </div>
-
-    <!-- Info box -->
-    <div class="info-box">
-      <strong>Días de actualización:</strong> 8, 15, 22, 25 y cierre de mes.<br>
-      <strong>Regalos:</strong> se procesan entre el día 15 y 25 del mes siguiente.
-    </div>
-
-    <!-- Tabs -->
-    <div class="tabs">
-      <div class="tab active" onclick="filtrar('todos',this)">Todos</div>
-      <div class="tab"        onclick="filtrar('si',this)">Cumplen</div>
-      <div class="tab"        onclick="filtrar('no',this)">No cumplen</div>
-    </div>
-
-    <!-- Tabla -->
-    <div class="table-wrap">
-      <div id="tabla-container">
-        <div class="center-msg"><span class="spinner"></span> Cargando...</div>
-      </div>
-    </div>
-
-  </div>
 </div>
-
 <script>
-// ── CONFIG ──────────────────────────────────────────────────────────────────
 const SUPA_URL = 'https://lequmcmudzzilxlessoz.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcXVtY211ZHp6aWx4bGVzc296Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMjkxMzIsImV4cCI6MjA3NDcwNTEzMn0.iTWmbHgkmWLGGUhT0pdN_FtaE0S4J9ZWXKyRD3m8FFM';
-
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
-
-// ── ESTADO ───────────────────────────────────────────────────────────────────
-let contrato       = null;
-let nombreContrato = '';
-let columnaOcultas = [];
-let todosLosDatos  = [];
-let filtroActual   = 'todos';
-let modoOscuro     = true;
-
-// ── INIT ─────────────────────────────────────────────────────────────────────
+let contrato = null, contratoEquiv = null, nombreContrato = '';
+let columnaOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro = true;
 (async () => {
-  const params = new URLSearchParams(window.location.search);
-  const tokenUrl = params.get('token');
-  if (tokenUrl) {
-    await validarYEntrar(tokenUrl);
-  }
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token) await validarYEntrar(token);
 })();
-
-// ── TOKEN SCREEN ─────────────────────────────────────────────────────────────
 async function entrarConToken() {
-  const val = document.getElementById('token-input').value.trim();
-  if (!val) return;
-  const btn = document.querySelector('.token-btn');
-  btn.textContent = 'Verificando...';
-  btn.disabled = true;
-  await validarYEntrar(val);
-  btn.textContent = 'Entrar';
-  btn.disabled = false;
+    const val = document.getElementById('token-input').value.trim();
+    if (!val) return;
+    const btn = document.querySelector('.token-btn');
+    btn.textContent = 'Verificando...'; btn.disabled = true;
+    await validarYEntrar(val);
+    btn.textContent = 'Entrar'; btn.disabled = false;
 }
-
-document.getElementById('token-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') entrarConToken();
-});
-
+document.getElementById('token-input').addEventListener('keydown', e => { if(e.key==='Enter') entrarConToken(); });
 async function validarYEntrar(token) {
-  const { data, error } = await sb
-    .from('contratos_tokens')
-    .select('*')
-    .eq('token', token)
-    .eq('activo', true)
-    .eq('tipo', 'contrato')
-    .maybeSingle();
-
-  if (error || !data) {
-    document.getElementById('token-error').textContent = 'Token inválido o inactivo.';
-    return;
-  }
-
-  contrato       = data.contrato;
-  nombreContrato = data.nombre || contrato;
-
-  // actualizar URL sin recargar
-  const url = new URL(window.location);
-  url.searchParams.set('token', token);
-  window.history.replaceState({}, '', url);
-
-  await iniciarApp();
+    const { data } = await sb.from('contratos_tokens').select('*').eq('token',token).eq('activo',true).eq('tipo','contrato').maybeSingle();
+    if (!data) { document.getElementById('token-error').textContent = 'Token inválido o inactivo.'; return; }
+    contrato = data.contrato;
+    nombreContrato = data.nombre || contrato;
+    const url = new URL(window.location);
+    url.searchParams.set('token', token);
+    window.history.replaceState({}, '', url);
+    await iniciarApp();
 }
-
-// ── INICIO DE APP ─────────────────────────────────────────────────────────────
 async function iniciarApp() {
-  document.getElementById('token-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  document.getElementById('header-nombre').textContent = nombreContrato;
-
-  columnaOcultas = await obtenerColumnasOcultas();
-  const periodos = await obtenerPeriodos();
-
-  const sel = document.getElementById('periodo-select');
-  sel.innerHTML = '';
-  periodos.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p;
-    opt.textContent = formatFecha(p);
-    sel.appendChild(opt);
-  });
-
-  if (periodos.length) {
-    await cargarDatos(periodos[0]);
-  } else {
-    document.getElementById('tabla-container').innerHTML =
-      '<div class="center-msg"><b>Sin datos</b>No hay periodos disponibles aún.</div>';
-  }
+    document.getElementById('token-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('header-nombre').textContent = nombreContrato;
+    const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
+    if (eq) {
+        contratoEquiv = eq.nexus_codigo === contrato ? eq.vertex_codigo : eq.nexus_codigo;
+    }
+    columnaOcultas = await obtenerColumnasOcultas();
+    const periodos = await obtenerPeriodos();
+    const sel = document.getElementById('periodo-select');
+    sel.innerHTML = '';
+    periodos.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p; opt.textContent = formatFecha(p);
+        sel.appendChild(opt);
+    });
+    if (periodos.length) await cargarDatos(periodos[0]);
+    else {
+        const msg = '<div class="center-msg"><b>Sin datos</b>No hay periodos disponibles aún.</div>';
+        document.getElementById('cards-container').innerHTML = msg;
+        document.getElementById('tabla-container').innerHTML = msg;
+    }
 }
-
-// ── COLUMNAS OCULTAS ──────────────────────────────────────────────────────────
 async function obtenerColumnasOcultas() {
-  const { data } = await sb
-    .from('config_columnas_ocultas')
-    .select('columna, contrato');
-  if (!data) return [];
-  return data
-    .filter(r => !r.contrato || r.contrato === contrato)
-    .map(r => r.columna?.toLowerCase());
+    const { data } = await sb.from('config_columnas_ocultas').select('columna,contrato');
+    if (!data) return [];
+    return data.filter(r => !r.contrato || r.contrato === contrato || r.contrato === contratoEquiv).map(r => r.columna?.toLowerCase());
 }
-
-// ── PERIODOS ──────────────────────────────────────────────────────────────────
 async function obtenerPeriodos() {
-  // Paginación para superar límite de 1000 de Supabase
-  let todas = new Set();
-  let offset = 0;
-  const batch = 1000;
-
-  while (true) {
-    const { data } = await sb
-      .from('usuarios_tiktok')
-      .select('fecha_datos')
-      .eq('contrato', contrato)
-      .range(offset, offset + batch - 1);
-
-    if (!data || data.length === 0) break;
-    data.forEach(r => { if (r.fecha_datos) todas.add(r.fecha_datos); });
-    if (data.length < batch) break;
-    offset += batch;
-  }
-
-  return filtrarFechasInteligente([...todas]);
+    const contratos = contratoEquiv ? [contrato, contratoEquiv] : [contrato];
+    let todas = new Set();
+    for (const c of contratos) {
+        let off = 0;
+        while (true) {
+            const { data } = await sb.from('usuarios_tiktok').select('fecha_datos').eq('contrato',c).range(off, off+999);
+            if (!data || !data.length) break;
+            data.forEach(r => { if(r.fecha_datos) todas.add(r.fecha_datos); });
+            if (data.length < 1000) break;
+            off += 1000;
+        }
+    }
+    return filtrarFechasInteligente([...todas]);
 }
-
 function filtrarFechasInteligente(fechas) {
-  if (!fechas.length) return [];
-  const porMes = {};
-  fechas.forEach(f => {
-    const d = new Date(f + 'T00:00:00');
-    const key = `${d.getFullYear()}-${d.getMonth()}`;
-    if (!porMes[key]) porMes[key] = [];
-    porMes[key].push(d);
-  });
-  const result = [];
-  Object.values(porMes).forEach(arr => {
-    arr.sort((a,b) => b-a);
-    const año = arr[0].getFullYear(), mes = arr[0].getMonth();
-    const ultimo = new Date(año, mes+1, 0).getDate();
-    const cierre = arr.find(d => d.getDate() === ultimo);
-    result.push(cierre || arr[0]);
-  });
-  result.sort((a,b) => b-a);
-  return result.map(d => d.toISOString().split('T')[0]);
+    if (!fechas.length) return [];
+    const porMes = {};
+    fechas.forEach(f => {
+        const d = new Date(f+'T00:00:00');
+        const k = `${d.getFullYear()}-${d.getMonth()}`;
+        if (!porMes[k]) porMes[k] = [];
+        porMes[k].push(d);
+    });
+    const result = [];
+    Object.values(porMes).forEach(arr => {
+        arr.sort((a,b)=>b-a);
+        const ultimo = new Date(arr[0].getFullYear(), arr[0].getMonth()+1, 0).getDate();
+        const cierre = arr.find(d => d.getDate() === ultimo);
+        result.push(cierre || arr[0]);
+    });
+    result.sort((a,b)=>b-a);
+    return result.map(d => d.toISOString().split('T')[0]);
 }
-
-// ── CARGAR DATOS ──────────────────────────────────────────────────────────────
 async function cargarDatos(periodo) {
-  document.getElementById('header-sub').textContent = formatFecha(periodo);
-  document.getElementById('tabla-container').innerHTML =
-    '<div class="center-msg"><span class="spinner"></span> Cargando datos...</div>';
-
-  let todos = [];
-  let off = 0;
-  const bsz = 1000;
-  while (true) {
-    const { data } = await sb
-      .from('usuarios_tiktok')
-      .select('usuario, dias, duracion, diamantes, nivel, cumple, notas')
-      .eq('contrato', contrato)
-      .eq('fecha_datos', periodo)
-      .range(off, off + bsz - 1);
-    if (!data || data.length === 0) break;
-    todos = todos.concat(data);
-    if (data.length < bsz) break;
-    off += bsz;
-  }
-  todosLosDatos = todos.sort((a,b) => (b.dias||0) - (a.dias||0));
-
-  actualizarStats();
-  renderTabla();
+    document.getElementById('header-sub').textContent = formatFecha(periodo);
+    const msg = '<div class="center-msg"><span class="spinner"></span> Cargando datos...</div>';
+    document.getElementById('cards-container').innerHTML = msg;
+    document.getElementById('tabla-container').innerHTML = msg;
+    const contratos = contratoEquiv ? [contrato, contratoEquiv] : [contrato];
+    let todos = [];
+    for (const c of contratos) {
+        let off = 0;
+        while (true) {
+            const { data } = await sb.from('usuarios_tiktok').select('usuario,dias,duracion,diamantes,nivel,cumple').eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
+            if (!data || !data.length) break;
+            todos = todos.concat(data);
+            if (data.length < 1000) break;
+            off += 1000;
+        }
+    }
+    todosLosDatos = todos.sort((a,b) => (b.dias||0)-(a.dias||0));
+    actualizarStats();
+    renderVistas();
 }
-
 function actualizarStats() {
-  const total   = todosLosDatos.length;
-  const cumplen = todosLosDatos.filter(r => cumpleTrue(r.cumple)).length;
-  document.getElementById('stat-total').textContent   = total;
-  document.getElementById('stat-cumplen').textContent = cumplen;
-  document.getElementById('stat-no').textContent      = total - cumplen;
+    const total = todosLosDatos.length;
+    const cumplen = todosLosDatos.filter(r => cumpleTrue(r.cumple)).length;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-cumplen').textContent = cumplen;
+    document.getElementById('stat-no').textContent = total - cumplen;
 }
-
-// ── RENDER TABLA ──────────────────────────────────────────────────────────────
-function renderTabla() {
-  let rows = todosLosDatos;
-  if (filtroActual === 'si') rows = rows.filter(r =>  cumpleTrue(r.cumple));
-  if (filtroActual === 'no') rows = rows.filter(r => !cumpleTrue(r.cumple));
-
-  if (!rows.length) {
-    document.getElementById('tabla-container').innerHTML =
-      '<div class="center-msg"><b>Sin registros</b>No hay jugadores en esta sección.</div>';
-    return;
-  }
-
-  // columnas visibles según config
-  const ocultarSueldo  = columnaOcultas.includes('sueldo') || columnaOcultas.includes('paypal_bruto');
-  const ocultarCoins   = columnaOcultas.includes('coins')  || columnaOcultas.includes('incentivo_coins');
-  const ocultarPaypal  = columnaOcultas.includes('paypal') || columnaOcultas.includes('incentivo_paypal');
-
-  let html = `<table>
-    <thead><tr>
-      <th>Usuario</th>
-      <th>Días</th>
-      <th>Horas</th>
-      <th>Diamantes</th>
-      <th>Nivel</th>
-      <th>Cumple</th>
-    </tr></thead>
-    <tbody>`;
-
-  rows.forEach(r => {
-    const c = cumpleTrue(r.cumple);
-    const lv = nivelLabel(r.nivel);
-    html += `<tr>
-      <td>${esc(r.usuario || '—')}</td>
-      <td>${r.dias ?? '—'}</td>
-      <td>${r.duracion || '—'}</td>
-      <td>${r.diamantes != null ? Number(r.diamantes).toLocaleString('es-MX') : '—'}</td>
-      <td>${lv}</td>
-      <td><span class="badge ${c ? 'badge-si' : 'badge-no'}">${c ? 'SI' : 'NO'}</span></td>
-    </tr>`;
-  });
-
-  html += '</tbody></table>';
-  document.getElementById('tabla-container').innerHTML = html;
+function renderVistas() {
+    let rows = todosLosDatos;
+    if (filtroActual === 'si') rows = rows.filter(r =>  cumpleTrue(r.cumple));
+    if (filtroActual === 'no') rows = rows.filter(r => !cumpleTrue(r.cumple));
+    if (!rows.length) {
+        const msg = '<div class="center-msg"><b>Sin registros</b>No hay jugadores en esta sección.</div>';
+        document.getElementById('cards-container').innerHTML = msg;
+        document.getElementById('tabla-container').innerHTML = msg;
+        return;
+    }
+    let cards = '';
+    rows.forEach(r => {
+        const c = cumpleTrue(r.cumple);
+        const lv = nivelLabel(r.nivel);
+        cards += `<div class="player-card">
+            <div class="card-top">
+                <div class="card-user">${esc(r.usuario||'—')}</div>
+                <span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span>
+            </div>
+            <div class="card-grid">
+                <div class="card-item"><div class="card-item-label">Días</div><div class="card-item-val">${r.dias??'—'}</div></div>
+                <div class="card-item"><div class="card-item-label">Horas</div><div class="card-item-val" style="font-size:11px">${r.duracion||'—'}</div></div>
+                <div class="card-item"><div class="card-item-label">Nivel</div><div class="card-item-val">${lv}</div></div>
+                <div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</div></div>
+            </div>
+        </div>`;
+    });
+    document.getElementById('cards-container').innerHTML = cards;
+    let tabla = `<table><thead><tr><th>Usuario</th><th>Días</th><th>Horas</th><th>Diamantes</th><th>Nivel</th><th>Cumple</th></tr></thead><tbody>`;
+    rows.forEach(r => {
+        const c = cumpleTrue(r.cumple);
+        tabla += `<tr>
+            <td>${esc(r.usuario||'—')}</td>
+            <td>${r.dias??'—'}</td>
+            <td>${r.duracion||'—'}</td>
+            <td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>
+            <td>${nivelLabel(r.nivel)}</td>
+            <td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>
+        </tr>`;
+    });
+    tabla += '</tbody></table>';
+    document.getElementById('tabla-container').innerHTML = tabla;
 }
-
-// ── HELPERS ───────────────────────────────────────────────────────────────────
 function cumpleTrue(v) {
-  if (typeof v === 'boolean') return v;
-  if (typeof v === 'string')  return v.toUpperCase() === 'SI' || v.toUpperCase() === 'TRUE';
-  return !!v;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'string') return v.toUpperCase()==='SI'||v.toUpperCase()==='TRUE';
+    return !!v;
 }
-
 function nivelLabel(n) {
-  const map = {
-    3: ['dot-lv3','LV3'],
-    2: ['dot-lv2','LV2'],
-    1: ['dot-lv1','LV1'],
-    0: ['dot-lv0','LV0'],
-  };
-  const [cls, txt] = map[n] || ['dot-lv0','—'];
-  return `<span class="lv"><span class="dot ${cls}"></span>${txt}</span>`;
+    const map={3:['dot-lv3','LV3'],2:['dot-lv2','LV2'],1:['dot-lv1','LV1'],0:['dot-lv0','LV0']};
+    const [cls,txt]=map[n]||['dot-lv0','—'];
+    return `<span class="lv"><span class="dot ${cls}"></span>${txt}</span>`;
 }
-
-function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
-
-const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
-function formatFecha(f) {
-  const d = new Date(f + 'T00:00:00');
-  return `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`;
-}
-
-// ── CONTROLES ─────────────────────────────────────────────────────────────────
-async function cambiarPeriodo(p) {
-  await cargarDatos(p);
-}
-
-function filtrar(tipo, el) {
-  filtroActual = tipo;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  renderTabla();
-}
-
-function toggleTheme() {
-  modoOscuro = !modoOscuro;
-  document.body.classList.toggle('light', !modoOscuro);
-  document.getElementById('theme-btn').textContent =
-    modoOscuro ? '☀ Modo claro' : '☾ Modo oscuro';
-}
-</script>
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function formatFecha(f){const d=new Date(f+'T00:00:00');return `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`;}
+async function cambiarPeriodo(p){await cargarDatos(p);}
+function filtrar(tipo,el){filtroActual=tipo;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderVistas();}
+function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}</script>
 </body>
 </html>
