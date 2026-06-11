@@ -180,7 +180,6 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 let contrato = null, contratoEquiv = null, nombreContrato = '';
 let columnaOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro = true;
 
-// FIX COMPLETO DE CONGELAMIENTO: Disparar la lectura cuando TODO el entorno de Supabase está en memoria
 window.onload = async function() {
     const token = new URLSearchParams(window.location.search).get('token');
     if (token) {
