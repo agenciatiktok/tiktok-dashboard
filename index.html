@@ -375,7 +375,7 @@ function renderVistas() {
             extras += `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${Number(r.diamantes).toLocaleString('es-MX')}</div></div>`;
         if (!ocPaypal && r.paypal_bruto > 0 && r.contrato && r.contrato.startsWith('B'))
             extras += `<div class="card-item"><div class="card-item-label">PayPal</div><div class="card-item-val">$${Number(r.paypal_bruto).toFixed(2)}</div></div>`;
-        if (!ocCoins && r.coins_bruto > 0)
+        if (!ocCoins && r.coins_bruto > 0 && r.contrato && r.contrato.startsWith('B'))
             extras += `<div class="card-item"><div class="card-item-label">Coins</div><div class="card-item-val">${Number(r.coins_bruto).toLocaleString('es-MX')}</div></div>`;
         if (!ocPaypalInc && r.paypal_incentivo > 0)
             extras += `<div class="card-item"><div class="card-item-label">Incentivo $</div><div class="card-item-val">$${Number(r.paypal_incentivo).toFixed(2)}</div></div>`;
@@ -412,7 +412,7 @@ function renderVistas() {
         let tds = `<td>${esc(r.usuario||'—')}</td><td>${r.dias??'—'}</td><td>${r.duracion||'—'}</td>`;
         if (!ocDiamantes) tds += `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
         if (!ocPaypal)    tds += `<td>${(r.contrato&&r.contrato.startsWith('B')&&r.paypal_bruto>0)?'$'+Number(r.paypal_bruto).toFixed(2):'—'}</td>`;
-        if (!ocCoins)     tds += `<td>${r.coins_bruto>0?Number(r.coins_bruto).toLocaleString('es-MX'):'—'}</td>`;
+        if (!ocCoins)     tds += `<td>${(r.contrato&&r.contrato.startsWith('B')&&r.coins_bruto>0)?Number(r.coins_bruto).toLocaleString('es-MX'):'—'}</td>`;
         if (!ocPaypalInc) tds += `<td>${r.paypal_incentivo>0?'$'+Number(r.paypal_incentivo).toFixed(2):'—'}</td>`;
         if (!ocCoinsInc)  tds += `<td>${r.coins_incentivo>0?Number(r.coins_incentivo).toLocaleString('es-MX'):'—'}</td>`;
         tds += `<td>${nivelLabel(nivel1Tabla3 && r.nivel >= 1 ? 3 : r.nivel)}</td><td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>`;
