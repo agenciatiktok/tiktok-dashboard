@@ -330,9 +330,9 @@ async function cargarDatos(periodo) {
         return {
             ...r,
             paypal_bruto:      rep ? parseFloat(rep.paypal_bruto||0)      : parseFloat(r.paypal_bruto||0),
-            paypal_incentivo:  rep ? parseFloat(rep.paypal_incentivo||0)  : 0,
+            paypal_incentivo:  rep ? parseFloat(rep.paypal_incentivo||0)  : parseFloat(r.paypal_incentivo||0),
             coins_bruto:       rep ? parseFloat(rep.coins_bruto||0)       : 0,
-            coins_incentivo:   rep ? parseFloat(rep.coins_incentivo||0)   : 0,
+            coins_incentivo:   rep ? parseFloat(rep.coins_incentivo||0)   : parseFloat(r.coins_incentivo||0),
         };
     }).sort((a,b) => (b.dias||0)-(a.dias||0));
 
