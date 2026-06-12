@@ -296,7 +296,7 @@ async function cargarDatos(periodo) {
         let off = 0;
         while (true) {
             const { data } = await sb.from('usuarios_tiktok')
-                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto')
+                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto,paypal_incentivo,coins_incentivo')
                 .eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
             if (!data || !data.length) break;
             baseRows = baseRows.concat(data);
