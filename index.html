@@ -301,9 +301,9 @@ async function validarYEntrar(token) {
 
 async function iniciarApp() {
     document.getElementById('token-screen').style.display = 'none';
-    // v1.5.3: mostrar pantalla de reglas antes de los datos
+    // v1.5.3: mostrar pantalla de reglas — app sigue oculto hasta aceptar
     document.getElementById('reglas-screen').style.display = 'flex';
-    document.getElementById('header-nombre').textContent = nombreContrato;
+    // Precargar datos en background mientras el usuario lee las reglas
     const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
     if (eq) {
         contratoEquiv = eq.nexus_codigo === contrato ? eq.vertex_codigo : eq.nexus_codigo;
@@ -316,6 +316,8 @@ async function iniciarApp() {
 async function aceptarReglas() {
     document.getElementById('reglas-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
+    // Ahora sí podemos escribir en elementos del app
+    document.getElementById('header-nombre').textContent = nombreContrato;
     renderMesButtons(periodosDisponibles);
     if (periodosDisponibles.length) await cargarDatos(periodosDisponibles[0]);
     else {
