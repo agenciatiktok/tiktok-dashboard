@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   index.html — TikTok Live Mi Progreso
-  VERSION: v1.5.1 — 2026-06-14
+  VERSION: v1.5.3 — 2026-06-14
   ORIGEN: v1.5.0
 
   CAMBIOS v1.5.1 (Angel Varguez / Claude Nexus):
@@ -136,6 +136,44 @@
         .token-input:focus { border-color: var(--cyan); }
         .token-btn { width: 100%; background: linear-gradient(135deg, var(--cyan), var(--pink)); border: none; color: #000; font-family: var(--font); font-weight: 600; font-size: 14px; padding: 12px; border-radius: var(--radius); cursor: pointer; }
         .token-error { color: var(--red-t); font-size: 12px; margin-top: 10px; min-height: 18px; }
+
+        /* ── PANTALLA DE REGLAS (v1.5.3) ── */
+        #reglas-screen {
+            display: none; align-items: flex-start; justify-content: center;
+            min-height: 100vh; padding: 20px; padding-top: 40px;
+        }
+        .reglas-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 16px; padding: 24px 20px; width: 100%; max-width: 500px;
+        }
+        .reglas-title {
+            font-size: 16px; font-weight: 600; margin-bottom: 16px;
+            color: var(--text); text-align: center;
+        }
+        .reglas-btn {
+            width: 100%; background: linear-gradient(135deg, var(--cyan), var(--pink));
+            border: none; color: #000; font-family: var(--font); font-weight: 600;
+            font-size: 15px; padding: 14px; border-radius: var(--radius);
+            cursor: pointer; margin-top: 20px;
+        }
+
+        /* ── BUSCADOR (v1.5.3) ── */
+        .search-row {
+            display: flex; gap: 8px; margin-bottom: 12px; align-items: center;
+        }
+        .search-input {
+            flex: 1; background: var(--surface); border: 1px solid var(--border);
+            color: var(--text); font-family: var(--font); font-size: 14px;
+            padding: 9px 14px; border-radius: 20px; outline: none;
+        }
+        .search-input:focus { border-color: var(--cyan); }
+        .search-input::placeholder { color: var(--muted); }
+        .ver-todos-btn {
+            background: var(--surface2); border: 1px solid var(--border);
+            color: var(--muted); font-family: var(--font); font-size: 12px;
+            padding: 9px 14px; border-radius: 20px; cursor: pointer; white-space: nowrap;
+        }
+        .ver-todos-btn:hover { border-color: var(--cyan); color: var(--text); }
     </style>
 </head>
 <body>
@@ -170,27 +208,15 @@
         <!-- SELECTOR DE MES v1.5.0: botones pill en lugar de dropdown -->
         <div class="mes-row" id="mes-row"></div>
 
-        <div class="info-box">
-            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
-                <strong style="color: var(--cyan); display: block; margin-bottom: 4px;">📅 CONTROL DE CORTES:</strong>
-                Actualización de datos los días <b>8, 15, 22, 25 y cierre de mes</b>. Es obligación y responsabilidad estricta del jugador estar pendiente de sus estadísticas en estas fechas para reportar cualquier anomalía a tiempo.
-            </div>
-            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
-                <strong style="color: var(--pink); display: block; margin-bottom: 4px;">🎁 PROCESAMIENTO DE INCENTIVOS:</strong>
-                Los regalos e incentivos se procesan y liquidan estrictamente entre el <b>día 20 y 30 del mes siguiente</b>.
-            </div>
-            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
-                <strong style="color: #ffcc00; display: block; margin-bottom: 4px;">⚠️ REGLA ANTI-ACUMULACIÓN (NO ACUMULABLE):</strong>
-                Los premios <b>NO se acumulan entre meses</b>. Tienes un plazo máximo de 30 días tras el cierre del periodo para validar tu estatus o reclamar tu incentivo. Estadísticas viejas no reclamadas dentro del periodo expiran y se pierden sin derecho a reclamación.
-            </div>
-            <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
-                <strong style="color: #22c55e; display: block; margin-bottom: 4px;">💬 SOPORTE GENERAL:</strong>
-                Para dudas o aclaraciones sobre tus métricas, contacta a tu agente asignado o haz clic aquí para ir al <a href="https://wa.me/5215659842514" target="_blank" style="color: #22c55e; font-weight: bold; text-decoration: underline;">WhatsApp de la Administración General (+52 1 56 5984 2514)</a>.
-            </div>
-            <div style="font-size: 11px; line-height: 1.4; color: var(--muted); padding-top: 4px;">
-                <i><b>Nota sobre Métricas:</b> Los datos aquí mostrados corresponden a los reportes oficiales descargados de la plataforma TikTok LIVE. Las horas y días válidos se calculan bajo el huso horario estándar de la plataforma (UTC+0). Cualquier diferencia menor con tu panel de la app se debe al desfase de tu zona horaria local.</i>
-            </div>
+        <!-- info-box movido a pantalla de reglas (v1.5.3) -->
+        <!-- BUSCADOR v1.5.3: filtro en tiempo real por @usuario -->
+        <div class="search-row">
+            <input class="search-input" id="search-input" type="text"
+                placeholder="🔍 Buscar por @usuario..."
+                oninput="buscarUsuario(this.value)"/>
+            <button class="ver-todos-btn" onclick="verTodos()">Ver todos</button>
         </div>
+
         <div class="tabs">
             <div class="tab active" onclick="filtrar('todos',this)">Todos</div>
             <div class="tab" onclick="filtrar('si',this)">Cumplen</div>
@@ -206,7 +232,32 @@
         </div>
     </div>
 </div>
-<script>
+
+<!-- PANTALLA DE REGLAS v1.5.3: se muestra cada vez que entran, antes de los datos -->
+<div id="reglas-screen">
+    <div class="reglas-card">
+        <div class="reglas-title">📋 Antes de continuar, lee esto:</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;">
+            <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                <strong style="color:var(--cyan);display:block;margin-bottom:4px;">📅 CONTROL DE CORTES</strong>
+                Actualización de datos los días <b style="color:var(--text)">8, 15, 22, 25 y cierre de mes</b>. Es tu obligación estar pendiente en estas fechas y reportar cualquier anomalía a tiempo.
+            </div>
+            <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                <strong style="color:var(--pink);display:block;margin-bottom:4px;">🎁 PROCESAMIENTO DE INCENTIVOS</strong>
+                Los regalos se procesan y liquidan entre el <b style="color:var(--text)">día 20 y 30 del mes siguiente</b>.
+            </div>
+            <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                <strong style="color:#ffcc00;display:block;margin-bottom:4px;">⚠️ NO ACUMULABLE</strong>
+                Los premios <b style="color:var(--text)">NO se acumulan entre meses</b>. Tienes 30 días tras el cierre para reclamar tu incentivo. Después de ese plazo expiran sin derecho a reclamación.
+            </div>
+            <div style="margin-bottom:4px;">
+                <strong style="color:#22c55e;display:block;margin-bottom:4px;">💬 SOPORTE</strong>
+                Para dudas contacta a tu agente o escribe al <a href="https://wa.me/5215659842514" target="_blank" style="color:#22c55e;font-weight:bold;text-decoration:underline;">WhatsApp General (+52 1 56 5984 2514)</a>.
+            </div>
+        </div>
+        <button class="reglas-btn" onclick="aceptarReglas()">Entendido — Ver mis datos ✅</button>
+    </div>
+</div>
 const SUPA_URL = 'https://lequmcmudzzilxlessoz.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcXVtY211ZHp6aWx4bGVzc296Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMjkxMzIsImV4cCI6MjA3NDcwNTEzMn0.iTWmbHgkmWLGGUhT0pdN_FtaE0S4J9ZWXKyRD3m8FFM';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
@@ -249,7 +300,8 @@ async function validarYEntrar(token) {
 
 async function iniciarApp() {
     document.getElementById('token-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+    // v1.5.3: mostrar pantalla de reglas antes de los datos
+    document.getElementById('reglas-screen').style.display = 'flex';
     document.getElementById('header-nombre').textContent = nombreContrato;
     const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
     if (eq) {
@@ -257,10 +309,13 @@ async function iniciarApp() {
     }
     columnasOcultas = await obtenerColumnasOcultas();
     periodosDisponibles = await obtenerPeriodos();
+}
 
-    // v1.5.0: renderizar botones de mes en lugar de dropdown
+// v1.5.3: usuario acepta reglas y pasa a ver datos
+async function aceptarReglas() {
+    document.getElementById('reglas-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
     renderMesButtons(periodosDisponibles);
-
     if (periodosDisponibles.length) await cargarDatos(periodosDisponibles[0]);
     else {
         const msg = '<div class="center-msg"><b>Sin datos</b>No hay periodos disponibles aún.</div>';
@@ -269,12 +324,12 @@ async function iniciarApp() {
     }
 }
 
-// v1.5.1: renderiza botones pill con fecha exacta, agrupados por año
+// v1.5.2: año actual visible, años anteriores ocultos bajo "Ver historial"
 function renderMesButtons(periodos) {
     const row = document.getElementById('mes-row');
     row.innerHTML = '';
 
-    // Agrupar por año
+    const anioActual = new Date().getFullYear().toString();
     const porAnio = {};
     periodos.forEach(p => {
         const anio = p.split('-')[0];
@@ -282,20 +337,29 @@ function renderMesButtons(periodos) {
         porAnio[anio].push(p);
     });
 
-    // Mostrar de mas reciente a mas antiguo
     const anios = Object.keys(porAnio).sort((a,b) => b - a);
     let primerBoton = true;
+    let historicVisible = false;
+
+    // Contenedor para botones de años anteriores (oculto por defecto)
+    const historicDiv = document.createElement('div');
+    historicDiv.id = 'historic-btns';
+    historicDiv.style.cssText = 'display:none;gap:6px;align-items:center;flex-wrap:nowrap;';
 
     anios.forEach(anio => {
-        // Etiqueta de año
-        const label = document.createElement('span');
-        label.textContent = anio;
-        label.style.cssText = 'font-size:10px;color:var(--muted);align-self:center;flex-shrink:0;padding:0 4px;';
-        row.appendChild(label);
+        const esActual = anio === anioActual;
+        const container = esActual ? row : historicDiv;
+
+        if (esActual) {
+            const label = document.createElement('span');
+            label.textContent = anio;
+            label.style.cssText = 'font-size:10px;color:var(--muted);align-self:center;flex-shrink:0;padding:0 4px;';
+            container.appendChild(label);
+        }
 
         porAnio[anio].forEach(p => {
             const d = new Date(p + 'T00:00:00');
-            const mes = MESES[d.getMonth()].substring(0, 3); // "Jun", "May", etc.
+            const mes = MESES[d.getMonth()].substring(0, 3);
             const dia = d.getDate();
             const btn = document.createElement('button');
             btn.className = 'mes-btn' + (primerBoton ? ' active' : '');
@@ -306,10 +370,33 @@ function renderMesButtons(periodos) {
                 btn.classList.add('active');
                 await cargarDatos(p);
             };
-            row.appendChild(btn);
+            container.appendChild(btn);
             primerBoton = false;
         });
     });
+
+    // Botón "Ver historial" si hay años anteriores
+    const tieneHistorico = anios.some(a => a !== anioActual);
+    if (tieneHistorico) {
+        const btnHistoric = document.createElement('button');
+        btnHistoric.className = 'mes-btn';
+        btnHistoric.id = 'btn-historic';
+        btnHistoric.textContent = '📂 Historial';
+        btnHistoric.style.cssText = 'border-style:dashed;';
+        btnHistoric.onclick = function() {
+            historicVisible = !historicVisible;
+            historicDiv.style.display = historicVisible ? 'flex' : 'none';
+            btnHistoric.textContent = historicVisible ? '✕ Cerrar' : '📂 Historial';
+        };
+        row.appendChild(btnHistoric);
+        row.appendChild(historicDiv);
+
+        // Agregar etiqueta de año y botones al historicDiv
+        const labelAnio = document.createElement('span');
+        labelAnio.textContent = anios.filter(a => a !== anioActual).join(' / ');
+        labelAnio.style.cssText = 'font-size:10px;color:var(--muted);align-self:center;flex-shrink:0;padding:0 4px;';
+        historicDiv.insertBefore(labelAnio, historicDiv.firstChild);
+    }
 }
 
 async function obtenerColumnasOcultas() {
@@ -433,6 +520,8 @@ function renderVistas() {
     });
     if (filtroActual === 'si') rows = rows.filter(r =>  r._cumpleReal);
     if (filtroActual === 'no') rows = rows.filter(r => !r._cumpleReal);
+    // v1.5.3: filtro por búsqueda de usuario
+    if (busquedaActual) rows = rows.filter(r => (r.usuario||'').toLowerCase().includes(busquedaActual));
     if (!rows.length) {
         const msg = '<div class="center-msg"><b>Sin registros</b>No hay jugadores en esta sección.</div>';
         document.getElementById('cards-container').innerHTML = msg;
@@ -503,6 +592,18 @@ function renderVistas() {
     });
     tabla += '</tbody></table>';
     document.getElementById('tabla-container').innerHTML = tabla;
+}
+
+// v1.5.3: buscador en tiempo real
+let busquedaActual = '';
+function buscarUsuario(q) {
+    busquedaActual = q.trim().toLowerCase();
+    renderVistas();
+}
+function verTodos() {
+    busquedaActual = '';
+    document.getElementById('search-input').value = '';
+    renderVistas();
 }
 
 function cumpleTrue(v) {
