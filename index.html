@@ -141,6 +141,7 @@
         #reglas-screen {
             display: none; align-items: flex-start; justify-content: center;
             min-height: 100vh; padding: 20px; padding-top: 40px;
+            background: var(--bg);
         }
         .reglas-card {
             background: var(--surface); border: 1px solid var(--border);
@@ -214,7 +215,6 @@
             <input class="search-input" id="search-input" type="text"
                 placeholder="🔍 Buscar por @usuario..."
                 oninput="buscarUsuario(this.value)"/>
-            <button class="ver-todos-btn" onclick="verTodos()">Ver todos</button>
         </div>
 
         <!-- BANNER PERIODO PARCIAL v1.5.4 -->
@@ -543,12 +543,27 @@ function renderVistas() {
     const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.paypal_bruto > 0);
     const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.coins_bruto > 0);
 
-    // v1.5.4: banner si periodo parcial (no es último día del mes)
+    // v1.5.4: banner siempre visible — mensaje distinto según periodo
     const bannerEl = document.getElementById('banner-periodo');
-    if (bannerEl && rows.length > 0) {
-        const fd = rows[0].fecha_datos || '';
-        const esCierre = fd ? (()=>{const d=new Date(fd+'T00:00:00');return d.getDate()===new Date(d.getFullYear(),d.getMonth()+1,0).getDate();})() : true;
-        bannerEl.style.display = esCierre ? 'none' : 'block';
+    if (bannerEl) {
+        const fd = rows.length > 0 ? (rows[0].fecha_datos || '') : '';
+        const esCierre = fd ? (()=>{const d=new Date(fd+'T00:00:00');return d.getDate()===new Date(d.getFullYear(),d.getMonth()+1,0).getDate();})() : false;
+        const esPeriodoActual = fd === periodosDisponibles[0];
+        if (!esCierre && esPeriodoActual) {
+            bannerEl.style.display = 'block';
+            bannerEl.style.background = 'rgba(255,204,0,0.08)';
+            bannerEl.style.borderColor = '#ffcc00';
+            bannerEl.style.color = '#ffcc00';
+            bannerEl.innerHTML = '⚠️ <b>Periodo en curso</b> — Estas estadísticas son un avance. Los regalos pueden cambiar al cierre del mes.';
+        } else if (esCierre) {
+            bannerEl.style.display = 'block';
+            bannerEl.style.background = 'rgba(37,244,238,0.06)';
+            bannerEl.style.borderColor = 'var(--cyan)';
+            bannerEl.style.color = 'var(--cyan)';
+            bannerEl.innerHTML = '✅ <b>Periodo cerrado</b> — Estos son los regalos finales ganados en este mes.';
+        } else {
+            bannerEl.style.display = 'none';
+        }
     }
 
     // ── TARJETAS (móvil) ──
@@ -632,7 +647,7 @@ const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','
 function formatFecha(f){const d=new Date(f+'T00:00:00');return `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`;}
 async function cambiarPeriodo(p){await cargarDatos(p);}
 function filtrar(tipo,el){filtroActual=tipo;document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderVistas();}
-function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}
+function toggleTheme(){modoOscuro=!modoOscuro;document.body.classList.toggle('light',!modoOscuro);document.getElementById('reglas-screen').classList.toggle('light',!modoOscuro);document.getElementById('theme-btn').textContent=modoOscuro?'☀ Claro':'☾ Oscuro';}
 </script>
 </body>
 </html>
