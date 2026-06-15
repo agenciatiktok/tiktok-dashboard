@@ -217,6 +217,9 @@
             <button class="ver-todos-btn" onclick="verTodos()">Ver todos</button>
         </div>
 
+        <!-- BANNER PERIODO PARCIAL v1.5.4 -->
+        <div id="banner-periodo" style="display:none;background:rgba(255,204,0,0.1);border:1px solid #ffcc00;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#ffcc00;"></div>
+
         <div class="tabs">
             <div class="tab active" onclick="filtrar('todos',this)">Todos</div>
             <div class="tab" onclick="filtrar('si',this)">Cumplen</div>
@@ -459,7 +462,7 @@ async function cargarDatos(periodo) {
         let off = 0;
         while (true) {
             const { data } = await sb.from('usuarios_tiktok')
-                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto,paypal_incentivo,coins_incentivo')
+                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto,paypal_incentivo,coins_incentivo,fecha_datos')
                 .eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
             if (!data || !data.length) break;
             baseRows = baseRows.concat(data);
@@ -536,8 +539,17 @@ function renderVistas() {
     const ocPaypalInc = columnasOcultas.includes('paypal_incentivo');
     const ocCoinsInc  = columnasOcultas.includes('coins_incentivo');
 
-    const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.paypal_bruto > 0);
-    const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.coins_bruto > 0);
+    // v1.5.4: PayPal/Coins solo si hay B-series con valor > 0
+    const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.paypal_bruto > 0);
+    const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.coins_bruto > 0);
+
+    // v1.5.4: banner si periodo parcial (no es último día del mes)
+    const bannerEl = document.getElementById('banner-periodo');
+    if (bannerEl && rows.length > 0) {
+        const fd = rows[0].fecha_datos || '';
+        const esCierre = fd ? (()=>{const d=new Date(fd+'T00:00:00');return d.getDate()===new Date(d.getFullYear(),d.getMonth()+1,0).getDate();})() : true;
+        bannerEl.style.display = esCierre ? 'none' : 'block';
+    }
 
     // ── TARJETAS (móvil) ──
     let cards = '';
