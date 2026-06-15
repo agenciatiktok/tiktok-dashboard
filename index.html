@@ -1,27 +1,19 @@
 <!DOCTYPE html>
 <!--
   index.html — TikTok Live Mi Progreso
-  VERSION: v1.5.0 — 2026-06-14
-  ORIGEN: v1.4.5 (ultimo push 2026-06-12, fix incentivos B-series y A-series)
+  VERSION: v1.5.1 — 2026-06-14
+  ORIGEN: v1.5.0
 
-  CAMBIOS v1.5.0 (Angel Varguez / Claude Nexus):
-  1. SELECTOR DE MES → botones pill horizontales en lugar de dropdown
-     - Mobile-first: scroll horizontal si no caben todos
-     - Muestra solo año en curso (filtrarFechasInteligente ya lo maneja)
-     - Periodo activo resaltado en cyan
-  2. COLUMNAS PAYPAL y COINS → se ocultan automaticamente si ningun jugador tiene valor > 0
-     - Antes: siempre visibles aunque todos fueran "—"
-     - Ahora: se calculan hasPaypal / hasCoins antes de renderizar
-  3. COLUMNA NIVEL → eliminada de tabla desktop y cards movil
-     - No aportaba valor al usuario final (ya tiene su tabla de incentivos)
-  4. NOMBRES DE COLUMNAS mas humanos:
-     - "Inc $" → "Regalo $"
-     - "Inc 🪙" → "Regalo 🪙"
-     - "Diamantes" → "💎"
-  5. CUMPLE → emoji ✅ / ❌ en lugar de badge SI/NO
-     - Mas visual e intuitivo para cualquier perfil de usuario
-  6. HIGHLIGHT de jugadores con regalo > 0
-     - Border-left cyan suave en cards y fila de tabla con fondo verde suave
+  CAMBIOS v1.5.1 (Angel Varguez / Claude Nexus):
+  1. BOTONES DE MES → muestran fecha exacta del corte (ej: "Jun 12") en lugar de solo mes
+     - Permite al usuario saber exactamente que corte esta viendo
+     - Formato: "Ene 11", "Feb 28", "Jun 12", etc.
+  2. ANOS SEPARADOS → 2026 y 2025 se muestran en grupos separados con etiqueta de año
+     - Evita confusion entre meses del mismo nombre en anos distintos
+  3. CUMPLE → logica corregida: requiere dias+horas+diamantes minimos
+     - Antes: ✅ si cumplia dias y horas aunque tuviera 0 diamantes (nivel 0 en tabla)
+     - Ahora: ✅ solo si tiene regalo > 0 O es contrato B-series con paypal/coins > 0
+     - Si tiene dias y horas pero no llega a 5000 diamantes → ❌
 -->
 <html lang="es">
 <head>
@@ -277,23 +269,46 @@ async function iniciarApp() {
     }
 }
 
-// v1.5.0: renderiza botones pill de mes
+// v1.5.1: renderiza botones pill con fecha exacta, agrupados por año
 function renderMesButtons(periodos) {
     const row = document.getElementById('mes-row');
     row.innerHTML = '';
-    periodos.forEach((p, i) => {
-        const d = new Date(p + 'T00:00:00');
-        const label = MESES[d.getMonth()];
-        const btn = document.createElement('button');
-        btn.className = 'mes-btn' + (i === 0 ? ' active' : '');
-        btn.textContent = label;
-        btn.dataset.periodo = p;
-        btn.onclick = async function() {
-            document.querySelectorAll('.mes-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            await cargarDatos(p);
-        };
-        row.appendChild(btn);
+
+    // Agrupar por año
+    const porAnio = {};
+    periodos.forEach(p => {
+        const anio = p.split('-')[0];
+        if (!porAnio[anio]) porAnio[anio] = [];
+        porAnio[anio].push(p);
+    });
+
+    // Mostrar de mas reciente a mas antiguo
+    const anios = Object.keys(porAnio).sort((a,b) => b - a);
+    let primerBoton = true;
+
+    anios.forEach(anio => {
+        // Etiqueta de año
+        const label = document.createElement('span');
+        label.textContent = anio;
+        label.style.cssText = 'font-size:10px;color:var(--muted);align-self:center;flex-shrink:0;padding:0 4px;';
+        row.appendChild(label);
+
+        porAnio[anio].forEach(p => {
+            const d = new Date(p + 'T00:00:00');
+            const mes = MESES[d.getMonth()].substring(0, 3); // "Jun", "May", etc.
+            const dia = d.getDate();
+            const btn = document.createElement('button');
+            btn.className = 'mes-btn' + (primerBoton ? ' active' : '');
+            btn.textContent = `${mes} ${dia}`;
+            btn.dataset.periodo = p;
+            btn.onclick = async function() {
+                document.querySelectorAll('.mes-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                await cargarDatos(p);
+            };
+            row.appendChild(btn);
+            primerBoton = false;
+        });
     });
 }
 
@@ -396,7 +411,13 @@ async function cargarDatos(periodo) {
 
 function actualizarStats() {
     const total = todosLosDatos.length;
-    const cumplen = todosLosDatos.filter(r => cumpleTrue(r.cumple)).length;
+    // v1.5.1: stats basados en cumple real (regalo/pago > 0)
+    const esB = contrato && contrato.startsWith('B');
+    const cumplen = todosLosDatos.filter(r => {
+        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
+        const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
+        return tieneRegalo || tienePagoB;
+    }).length;
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-cumplen').textContent = cumplen;
     document.getElementById('stat-no').textContent = total - cumplen;
@@ -404,8 +425,14 @@ function actualizarStats() {
 
 function renderVistas() {
     let rows = todosLosDatos;
-    if (filtroActual === 'si') rows = rows.filter(r =>  cumpleTrue(r.cumple));
-    if (filtroActual === 'no') rows = rows.filter(r => !cumpleTrue(r.cumple));
+    // v1.5.1: pre-calcular _cumpleReal para todos antes de filtrar
+    rows.forEach(r => {
+        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
+        const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
+        r._cumpleReal = tieneRegalo || tienePagoB;
+    });
+    if (filtroActual === 'si') rows = rows.filter(r =>  r._cumpleReal);
+    if (filtroActual === 'no') rows = rows.filter(r => !r._cumpleReal);
     if (!rows.length) {
         const msg = '<div class="center-msg"><b>Sin registros</b>No hay jugadores en esta sección.</div>';
         document.getElementById('cards-container').innerHTML = msg;
@@ -417,14 +444,13 @@ function renderVistas() {
     const ocPaypalInc = columnasOcultas.includes('paypal_incentivo');
     const ocCoinsInc  = columnasOcultas.includes('coins_incentivo');
 
-    // v1.5.0: PayPal y Coins solo se muestran si al menos 1 jugador tiene valor > 0
     const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.paypal_bruto > 0);
     const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.coins_bruto > 0);
 
     // ── TARJETAS (móvil) ──
     let cards = '';
     rows.forEach(r => {
-        const c = cumpleTrue(r.cumple);
+        const c = r._cumpleReal; // v1.5.1: cumple real basado en regalo/pago
         const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         let extras = '';
         if (!ocDiamantes && r.diamantes != null)
@@ -453,7 +479,7 @@ function renderVistas() {
     document.getElementById('cards-container').innerHTML = cards;
 
     // ── TABLA (desktop) ──
-    // v1.5.0: Nivel eliminado, nombres más humanos, columnas vacías ocultas
+    // v1.5.1: Nivel eliminado, nombres más humanos, columnas vacías ocultas, cumple real
     let ths = '<th>Usuario</th><th>Días</th><th>Horas</th>';
     if (!ocDiamantes) ths += '<th>💎</th>';
     if (!ocPaypal)    ths += '<th>PayPal</th>';
@@ -464,7 +490,7 @@ function renderVistas() {
 
     let tabla = `<table><thead><tr>${ths}</tr></thead><tbody>`;
     rows.forEach(r => {
-        const c = cumpleTrue(r.cumple);
+        const c = r._cumpleReal; // v1.5.1: cumple real
         const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         let tds = `<td>${esc(r.usuario||'—')}</td><td>${r.dias??'—'}</td><td>${r.duracion||'—'}</td>`;
         if (!ocDiamantes) tds += `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
