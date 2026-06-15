@@ -1,4 +1,28 @@
 <!DOCTYPE html>
+<!--
+  index.html — TikTok Live Mi Progreso
+  VERSION: v1.5.0 — 2026-06-14
+  ORIGEN: v1.4.5 (ultimo push 2026-06-12, fix incentivos B-series y A-series)
+
+  CAMBIOS v1.5.0 (Angel Varguez / Claude Nexus):
+  1. SELECTOR DE MES → botones pill horizontales en lugar de dropdown
+     - Mobile-first: scroll horizontal si no caben todos
+     - Muestra solo año en curso (filtrarFechasInteligente ya lo maneja)
+     - Periodo activo resaltado en cyan
+  2. COLUMNAS PAYPAL y COINS → se ocultan automaticamente si ningun jugador tiene valor > 0
+     - Antes: siempre visibles aunque todos fueran "—"
+     - Ahora: se calculan hasPaypal / hasCoins antes de renderizar
+  3. COLUMNA NIVEL → eliminada de tabla desktop y cards movil
+     - No aportaba valor al usuario final (ya tiene su tabla de incentivos)
+  4. NOMBRES DE COLUMNAS mas humanos:
+     - "Inc $" → "Regalo $"
+     - "Inc 🪙" → "Regalo 🪙"
+     - "Diamantes" → "💎"
+  5. CUMPLE → emoji ✅ / ❌ en lugar de badge SI/NO
+     - Mas visual e intuitivo para cualquier perfil de usuario
+  6. HIGHLIGHT de jugadores con regalo > 0
+     - Border-left cyan suave en cards y fila de tabla con fondo verde suave
+-->
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -50,21 +74,42 @@
         .stat-val { font-size: 22px; font-weight: 500; }
         .c-cyan { color: var(--cyan); }
         .c-pink { color: var(--pink); }
-        .periodo-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-        .periodo-label { font-size: 12px; color: var(--muted); flex-shrink: 0; }
-        select {
-            background: var(--surface); border: 1px solid var(--border); color: var(--text);
-            font-family: var(--font); font-size: 13px; padding: 7px 12px; border-radius: 20px;
-            cursor: pointer; outline: none; flex: 1; max-width: 260px;
+
+        /* ── SELECTOR DE MES (v1.5.0) ── */
+        .mes-row {
+            display: flex; gap: 6px; margin-bottom: 12px;
+            overflow-x: auto; padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
         }
-        select:focus { border-color: var(--cyan); }
+        .mes-row::-webkit-scrollbar { display: none; }
+        .mes-btn {
+            background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+            padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 12px;
+            white-space: nowrap; flex-shrink: 0; font-family: var(--font);
+            transition: all .15s;
+        }
+        .mes-btn:hover { border-color: var(--cyan); color: var(--text); }
+        .mes-btn.active {
+            background: var(--cyan); border-color: var(--cyan);
+            color: #000; font-weight: 600;
+        }
+
         .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
         .tab { padding: 8px 14px; font-size: 13px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; user-select: none; }
         .tab.active { color: var(--cyan); border-color: var(--cyan); }
         .info-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--cyan); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; font-size: 12px; color: var(--muted); line-height: 1.6; }
         .info-box strong { color: var(--text); }
         .cards-list { display: flex; flex-direction: column; gap: 8px; }
-        .player-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+
+        /* ── CARDS (v1.5.0: highlight si tiene regalo) ── */
+        .player-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 12px 14px;
+        }
+        .player-card.tiene-regalo {
+            border-left: 3px solid var(--cyan);
+        }
         .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
         .card-user { font-size: 14px; font-weight: 500; word-break: break-all; }
         .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -76,19 +121,16 @@
         th { color: var(--muted); font-weight: 500; text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
         td { padding: 10px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
         tbody tr:hover td { background: var(--surface2); }
+        /* highlight fila con regalo (v1.5.0) */
+        tbody tr.tiene-regalo td { background: rgba(37,244,238,0.04); }
+        tbody tr.tiene-regalo:hover td { background: rgba(37,244,238,0.08); }
+
         @media(min-width:640px){
             .cards-list { display: none; }
             .table-wrap { display: block; }
             .main { padding: 18px 20px 40px; }
             .stat-val { font-size: 26px; }
         }
-        .badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
-        .badge-si { background: var(--green); color: var(--green-t); }
-        .badge-no { background: var(--red); color: var(--red-t); }
-        .lv { display: inline-flex; align-items: center; gap: 4px; }
-        .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-        .dot-lv3 { background: #FFD700; } .dot-lv2 { background: #C0C0C0; }
-        .dot-lv1 { background: #CD7F32; } .dot-lv0 { background: #444; }
         .center-msg { text-align: center; padding: 50px 20px; color: var(--muted); }
         .center-msg b { display: block; font-size: 15px; color: var(--text); margin-bottom: 6px; }
         .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--cyan); border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px; }
@@ -132,10 +174,10 @@
             <div class="stat"><div class="stat-label">Cumplen</div><div class="stat-val c-cyan" id="stat-cumplen">—</div></div>
             <div class="stat"><div class="stat-label">No cumplen</div><div class="stat-val c-pink" id="stat-no">—</div></div>
         </div>
-        <div class="periodo-row">
-            <span class="periodo-label">Periodo:</span>
-            <select id="periodo-select" onchange="cambiarPeriodo(this.value)"></select>
-        </div>
+
+        <!-- SELECTOR DE MES v1.5.0: botones pill en lugar de dropdown -->
+        <div class="mes-row" id="mes-row"></div>
+
         <div class="info-box">
             <div style="margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
                 <strong style="color: var(--cyan); display: block; margin-bottom: 4px;">📅 CONTROL DE CORTES:</strong>
@@ -179,8 +221,9 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let contrato = null, contratoEquiv = null, nombreContrato = '';
 let columnasOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro = true;
-let esVertex = false; // true si contrato empieza con B
-let nivel1Tabla3 = false; // true si contrato tiene Nivel1→Tabla3=SI
+let esVertex = false;
+let nivel1Tabla3 = false;
+let periodosDisponibles = []; // v1.5.0: guardamos para el selector de mes
 
 window.onload = async function() {
     const token = new URLSearchParams(window.location.search).get('token');
@@ -202,7 +245,7 @@ async function validarYEntrar(token) {
     const { data } = await sb.from('contratos_tokens').select('*').eq('token',token).eq('activo',true).eq('tipo','contrato').maybeSingle();
     if (!data) { document.getElementById('token-error').textContent = 'Token inválido o inactivo.'; return; }
     contrato = data.contrato;
-    nombreContrato = data.nombre || contrato;
+    nombreContrato = data.nombre_display || data.nombre || contrato;
     esVertex = contrato.startsWith('B');
     const { data: cfgContrato } = await sb.from('contratos').select('nivel1_tabla3').eq('codigo',contrato).maybeSingle();
     nivel1Tabla3 = cfgContrato?.nivel1_tabla3 === true;
@@ -216,26 +259,42 @@ async function iniciarApp() {
     document.getElementById('token-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     document.getElementById('header-nombre').textContent = nombreContrato;
-    // Detectar contrato equivalente A↔B
     const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
     if (eq) {
         contratoEquiv = eq.nexus_codigo === contrato ? eq.vertex_codigo : eq.nexus_codigo;
     }
     columnasOcultas = await obtenerColumnasOcultas();
-    const periodos = await obtenerPeriodos();
-    const sel = document.getElementById('periodo-select');
-    sel.innerHTML = '';
-    periodos.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p; opt.textContent = formatFecha(p);
-        sel.appendChild(opt);
-    });
-    if (periodos.length) await cargarDatos(periodos[0]);
+    periodosDisponibles = await obtenerPeriodos();
+
+    // v1.5.0: renderizar botones de mes en lugar de dropdown
+    renderMesButtons(periodosDisponibles);
+
+    if (periodosDisponibles.length) await cargarDatos(periodosDisponibles[0]);
     else {
         const msg = '<div class="center-msg"><b>Sin datos</b>No hay periodos disponibles aún.</div>';
         document.getElementById('cards-container').innerHTML = msg;
         document.getElementById('tabla-container').innerHTML = msg;
     }
+}
+
+// v1.5.0: renderiza botones pill de mes
+function renderMesButtons(periodos) {
+    const row = document.getElementById('mes-row');
+    row.innerHTML = '';
+    periodos.forEach((p, i) => {
+        const d = new Date(p + 'T00:00:00');
+        const label = MESES[d.getMonth()];
+        const btn = document.createElement('button');
+        btn.className = 'mes-btn' + (i === 0 ? ' active' : '');
+        btn.textContent = label;
+        btn.dataset.periodo = p;
+        btn.onclick = async function() {
+            document.querySelectorAll('.mes-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            await cargarDatos(p);
+        };
+        row.appendChild(btn);
+    });
 }
 
 async function obtenerColumnasOcultas() {
@@ -291,7 +350,6 @@ async function cargarDatos(periodo) {
     const contratos = contratoEquiv ? [contrato, contratoEquiv] : [contrato];
     let baseRows = [];
 
-    // Paso 1: leer datos base de usuarios_tiktok
     for (const c of contratos) {
         let off = 0;
         while (true) {
@@ -305,11 +363,8 @@ async function cargarDatos(periodo) {
         }
     }
 
-    // Paso 2: para contratos A (Nexus), enriquecer con montos de reportes_contratos
-    // Los B ya traen paypal_bruto de usuarios_tiktok (subido por VERTEX_SUBIR_SUPABASE)
-    // Los A tienen los montos en reportes_contratos
     const contratosA = contratos.filter(c => c.startsWith('A'));
-    let reportesMap = {}; // usuario → {paypal_bruto, paypal_incentivo, coins_bruto, coins_incentivo}
+    let reportesMap = {};
 
     for (const c of contratosA) {
         let off = 0;
@@ -324,7 +379,6 @@ async function cargarDatos(periodo) {
         }
     }
 
-    // Paso 3: fusionar
     todosLosDatos = baseRows.map(r => {
         const rep = reportesMap[r.usuario];
         return {
@@ -359,38 +413,39 @@ function renderVistas() {
         return;
     }
 
-    const ocDiamantes    = columnasOcultas.includes('diamantes');
-    const ocPaypal = columnasOcultas.includes('paypal');
-    const ocCoins        = columnasOcultas.includes('coins');
-    const ocPaypalInc    = columnasOcultas.includes('paypal_incentivo');
-    const ocCoinsInc     = columnasOcultas.includes('coins_incentivo');
+    const ocDiamantes = columnasOcultas.includes('diamantes');
+    const ocPaypalInc = columnasOcultas.includes('paypal_incentivo');
+    const ocCoinsInc  = columnasOcultas.includes('coins_incentivo');
+
+    // v1.5.0: PayPal y Coins solo se muestran si al menos 1 jugador tiene valor > 0
+    const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.paypal_bruto > 0);
+    const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.coins_bruto > 0);
 
     // ── TARJETAS (móvil) ──
     let cards = '';
     rows.forEach(r => {
         const c = cumpleTrue(r.cumple);
-        const lv = nivelLabel(nivel1Tabla3 && r.nivel >= 1 ? 3 : r.nivel);
+        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         let extras = '';
         if (!ocDiamantes && r.diamantes != null)
-            extras += `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">Diamantes</div><div class="card-item-val">${Number(r.diamantes).toLocaleString('es-MX')}</div></div>`;
+            extras += `<div class="card-item" style="grid-column:1/-1"><div class="card-item-label">💎 Diamantes</div><div class="card-item-val">${Number(r.diamantes).toLocaleString('es-MX')}</div></div>`;
         if (!ocPaypal && r.paypal_bruto > 0 && r.contrato && r.contrato.startsWith('B'))
             extras += `<div class="card-item"><div class="card-item-label">PayPal</div><div class="card-item-val">$${Number(r.paypal_bruto).toFixed(2)}</div></div>`;
         if (!ocCoins && r.coins_bruto > 0 && r.contrato && r.contrato.startsWith('B'))
             extras += `<div class="card-item"><div class="card-item-label">Coins</div><div class="card-item-val">${Number(r.coins_bruto).toLocaleString('es-MX')}</div></div>`;
         if (!ocPaypalInc && r.paypal_incentivo > 0)
-            extras += `<div class="card-item"><div class="card-item-label">Incentivo $</div><div class="card-item-val">$${Number(r.paypal_incentivo).toFixed(2)}</div></div>`;
+            extras += `<div class="card-item"><div class="card-item-label">Regalo $</div><div class="card-item-val" style="color:var(--cyan)">$${Number(r.paypal_incentivo).toFixed(2)}</div></div>`;
         if (!ocCoinsInc && r.coins_incentivo > 0)
-            extras += `<div class="card-item"><div class="card-item-label">Incentivo 🪙</div><div class="card-item-val">${Number(r.coins_incentivo).toLocaleString('es-MX')}</div></div>`;
+            extras += `<div class="card-item"><div class="card-item-label">Regalo 🪙</div><div class="card-item-val" style="color:var(--cyan)">${Number(r.coins_incentivo).toLocaleString('es-MX')}</div></div>`;
 
-        cards += `<div class="player-card">
+        cards += `<div class="player-card${tieneRegalo?' tiene-regalo':''}">
             <div class="card-top">
                 <div class="card-user">${esc(r.usuario||'—')}</div>
-                <span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span>
+                <span style="font-size:18px">${c?'✅':'❌'}</span>
             </div>
             <div class="card-grid">
                 <div class="card-item"><div class="card-item-label">Días</div><div class="card-item-val">${r.dias??'—'}</div></div>
                 <div class="card-item"><div class="card-item-label">Horas</div><div class="card-item-val" style="font-size:11px">${r.duracion||'—'}</div></div>
-                <div class="card-item"><div class="card-item-label">Nivel</div><div class="card-item-val">${lv}</div></div>
                 ${extras}
             </div>
         </div>`;
@@ -398,25 +453,27 @@ function renderVistas() {
     document.getElementById('cards-container').innerHTML = cards;
 
     // ── TABLA (desktop) ──
+    // v1.5.0: Nivel eliminado, nombres más humanos, columnas vacías ocultas
     let ths = '<th>Usuario</th><th>Días</th><th>Horas</th>';
-    if (!ocDiamantes) ths += '<th>Diamantes</th>';
+    if (!ocDiamantes) ths += '<th>💎</th>';
     if (!ocPaypal)    ths += '<th>PayPal</th>';
     if (!ocCoins)     ths += '<th>Coins</th>';
-    if (!ocPaypalInc) ths += '<th>Inc $</th>';
-    if (!ocCoinsInc)  ths += '<th>Inc 🪙</th>';
-    ths += '<th>Nivel</th><th>Cumple</th>';
+    if (!ocPaypalInc) ths += '<th>Regalo $</th>';
+    if (!ocCoinsInc)  ths += '<th>Regalo 🪙</th>';
+    ths += '<th>Cumple</th>';
 
     let tabla = `<table><thead><tr>${ths}</tr></thead><tbody>`;
     rows.forEach(r => {
         const c = cumpleTrue(r.cumple);
+        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         let tds = `<td>${esc(r.usuario||'—')}</td><td>${r.dias??'—'}</td><td>${r.duracion||'—'}</td>`;
         if (!ocDiamantes) tds += `<td>${r.diamantes!=null?Number(r.diamantes).toLocaleString('es-MX'):'—'}</td>`;
         if (!ocPaypal)    tds += `<td>${(r.contrato&&r.contrato.startsWith('B')&&r.paypal_bruto>0)?'$'+Number(r.paypal_bruto).toFixed(2):'—'}</td>`;
         if (!ocCoins)     tds += `<td>${(r.contrato&&r.contrato.startsWith('B')&&r.coins_bruto>0)?Number(r.coins_bruto).toLocaleString('es-MX'):'—'}</td>`;
-        if (!ocPaypalInc) tds += `<td>${r.paypal_incentivo>0?'$'+Number(r.paypal_incentivo).toFixed(2):'—'}</td>`;
-        if (!ocCoinsInc)  tds += `<td>${r.coins_incentivo>0?Number(r.coins_incentivo).toLocaleString('es-MX'):'—'}</td>`;
-        tds += `<td>${nivelLabel(nivel1Tabla3 && r.nivel >= 1 ? 3 : r.nivel)}</td><td><span class="badge ${c?'badge-si':'badge-no'}">${c?'SI':'NO'}</span></td>`;
-        tabla += `<tr>${tds}</tr>`;
+        if (!ocPaypalInc) tds += `<td style="${r.paypal_incentivo>0?'color:var(--cyan);font-weight:600':''}">${r.paypal_incentivo>0?'$'+Number(r.paypal_incentivo).toFixed(2):'—'}</td>`;
+        if (!ocCoinsInc)  tds += `<td style="${r.coins_incentivo>0?'color:var(--cyan);font-weight:600':''}">${r.coins_incentivo>0?Number(r.coins_incentivo).toLocaleString('es-MX'):'—'}</td>`;
+        tds += `<td style="font-size:16px">${c?'✅':'❌'}</td>`;
+        tabla += `<tr class="${tieneRegalo?'tiene-regalo':''}">${tds}</tr>`;
     });
     tabla += '</tbody></table>';
     document.getElementById('tabla-container').innerHTML = tabla;
@@ -426,12 +483,6 @@ function cumpleTrue(v) {
     if (typeof v === 'boolean') return v;
     if (typeof v === 'string') return v.toUpperCase()==='SI'||v.toUpperCase()==='TRUE';
     return !!v;
-}
-
-function nivelLabel(n) {
-    const map={3:['dot-lv3','LV3'],2:['dot-lv2','LV2'],1:['dot-lv1','LV1'],0:['dot-lv0','LV0']};
-    const [cls,txt]=map[n]||['dot-lv0','—'];
-    return `<span class="lv"><span class="dot ${cls}"></span>${txt}</span>`;
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
