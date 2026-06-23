@@ -548,6 +548,8 @@ function renderVistas() {
     // v1.5.4: PayPal/Coins solo si hay B-series con valor > 0
     const ocPaypal = columnasOcultas.includes('paypal') || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.paypal_bruto > 0);
     const ocCoins  = columnasOcultas.includes('coins')  || !rows.some(r => r.contrato && r.contrato.startsWith('B') && r.coins_bruto > 0);
+    // v1.5.7: ocultar Cumple -- A002/B003 (ocultar_todo). REVERTIR: quitar esta linea + los 3 usos de ocCumple abajo (card span, th Cumple, td Cumple)
+    const ocCumple = columnasOcultas.includes('cumple');
 
     // v1.5.4: banner siempre visible — mensaje distinto según periodo
     const bannerEl = document.getElementById('banner-periodo');
@@ -592,7 +594,7 @@ function renderVistas() {
         cards += `<div class="player-card${tieneRegalo?' tiene-regalo':''}">
             <div class="card-top">
                 <div class="card-user">${esc(r.usuario||'—')}</div>
-                <span style="font-size:18px">${c?'✅':'❌'}</span>
+                ${ocCumple ? '' : `<span style="font-size:18px">${c?'✅':'❌'}</span>`}
             </div>
             <div class="card-grid">
                 <div class="card-item"><div class="card-item-label">Días</div><div class="card-item-val">${r.dias??'—'}</div></div>
@@ -611,7 +613,7 @@ function renderVistas() {
     if (!ocCoins)     ths += '<th>Coins</th>';
     if (!ocPaypalInc) ths += '<th>Regalo $</th>';
     if (!ocCoinsInc)  ths += '<th>Regalo 🪙</th>';
-    ths += '<th>Cumple</th>';
+    if (!ocCumple) ths += '<th>Cumple</th>'; // v1.5.7: A002/B003 ocultar_todo
 
     let tabla = `<table><thead><tr>${ths}</tr></thead><tbody>`;
     rows.forEach(r => {
@@ -623,7 +625,7 @@ function renderVistas() {
         if (!ocCoins)     tds += `<td>${(r.contrato&&r.contrato.startsWith('B')&&r.coins_bruto>0)?Number(r.coins_bruto).toLocaleString('es-MX'):'—'}</td>`;
         if (!ocPaypalInc) tds += `<td style="${r.paypal_incentivo>0?'color:var(--cyan);font-weight:600':''}">${r.paypal_incentivo>0?'$'+Number(r.paypal_incentivo).toFixed(2):'—'}</td>`;
         if (!ocCoinsInc)  tds += `<td style="${r.coins_incentivo>0?'color:var(--cyan);font-weight:600':''}">${r.coins_incentivo>0?Number(r.coins_incentivo).toLocaleString('es-MX'):'—'}</td>`;
-        tds += `<td style="font-size:16px">${c?'✅':'❌'}</td>`;
+        if (!ocCumple) tds += `<td style="font-size:16px">${c?'✅':'❌'}</td>`; // v1.5.7: A002/B003 ocultar_todo
         tabla += `<tr class="${tieneRegalo?'tiene-regalo':''}">${tds}</tr>`;
     });
     tabla += '</tbody></table>';
