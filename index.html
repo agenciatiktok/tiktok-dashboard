@@ -468,7 +468,7 @@ async function cargarDatos(periodo) {
         let off = 0;
         while (true) {
             const { data } = await sb.from('usuarios_tiktok')
-                .select('usuario,dias,duracion,diamantes,nivel,cumple,contrato,paypal_bruto,paypal_incentivo,coins_incentivo,fecha_datos')
+                .select('usuario,dias,horas,duracion,diamantes,nivel,cumple,contrato,paypal_bruto,paypal_incentivo,coins_incentivo,fecha_datos')
                 .eq('contrato',c).eq('fecha_datos',periodo).range(off, off+999);
             if (!data || !data.length) break;
             baseRows = baseRows.concat(data);
@@ -528,7 +528,13 @@ function renderVistas() {
     rows.forEach(r => {
         const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
-        r._cumpleReal = tieneRegalo || tienePagoB;
+        // v1.5.7: EXCEPCION A002/B003 -- decision Angel 2026-06-22. Cumple = apto para regalo (7d/15h universal), NO regalo ya recibido. El agente decide el regalo aparte.
+        // REVERTIR: borrar este if/else y dejar 'r._cumpleReal = tieneRegalo || tienePagoB;' suelto.
+        if (r.contrato === 'A002' || r.contrato === 'B003') {
+            r._cumpleReal = (r.dias >= 7 && r.horas >= 15);
+        } else {
+            r._cumpleReal = tieneRegalo || tienePagoB;
+        }
     });
     if (filtroActual === 'si') rows = rows.filter(r =>  r._cumpleReal);
     if (filtroActual === 'no') rows = rows.filter(r => !r._cumpleReal);
