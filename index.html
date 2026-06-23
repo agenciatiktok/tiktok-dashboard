@@ -517,11 +517,19 @@ async function cargarDatos(periodo) {
 // Antes estaba duplicada en los dos lugares y se desincronizaba (un parche solo tocaba renderVistas).
 // REVERTIR: borrar esta funcion completa y restaurar los blocks duplicados (ver git log commit 1a65c98 para el texto original).
 function calcularCumpleReal(r) {
+    // v1.6 -- decision Angel/Vertex 2026-06-23. B-series: confiamos en columna 'cumple' que Vertex
+    // ya sube con el umbral propio de CADA contrato (MAESTRO sec 13: Nexus NUNCA recalcula datos
+    // de Vertex). Antes recalculabamos via paypal_bruto/coins_bruto, que solo existe si hay pago
+    // real trackeado -- fallaba en TODO B0XX con regalo_real=no (23 contratos confirmados, no solo
+    // B003/B019). Aplicar 7d/15h fijo a los 23 hubiera quedado mal en los que usan otro umbral
+    // (10/20, 8/20, etc. por contrato, por disenio de Vertex).
+    // REVERTIR: restaurar tienePagoB y los ifs explicitos de B003/B019 (ver git log antes de este commit).
+    if (r.contrato && r.contrato.startsWith('B')) {
+        return r.cumple === true || r.cumple === 'true' || r.cumple === 'SI';
+    }
     const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
-    const tienePagoB = (r.contrato && r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
-    if (r.contrato === 'A002' || r.contrato === 'B003') return (r.dias >= 7 && r.horas >= 15);
-    if (r.contrato === 'A006' || r.contrato === 'A014' || r.contrato === 'B019') return (r.dias >= 7 && r.horas >= 15);
-    return tieneRegalo || tienePagoB;
+    if (r.contrato === 'A002' || r.contrato === 'A006' || r.contrato === 'A014') return (r.dias >= 7 && r.horas >= 15);
+    return tieneRegalo;
 }
 
 function actualizarStats() {
