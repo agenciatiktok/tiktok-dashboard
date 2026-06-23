@@ -534,8 +534,11 @@ function renderVistas() {
         const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
         const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
         // v1.5.7: EXCEPCION A002/B003 -- decision Angel 2026-06-22. Cumple = apto para regalo (7d/15h universal), NO regalo ya recibido. El agente decide el regalo aparte.
-        // REVERTIR: borrar este if/else y dejar 'r._cumpleReal = tieneRegalo || tienePagoB;' suelto.
+        // v1.5.8: EXCEPCION A006/A014/B019 -- decision Angel 2026-06-22. Tipo EMPLEADO_4PCT_AUTONOMO: el empleado paga directo, sistema nunca calcula incentivo -> Cumple quedaria SIEMPRE en falso sin esto. Mismo criterio 7d/15h.
+        // REVERTIR: borrar este if/else if y dejar 'r._cumpleReal = tieneRegalo || tienePagoB;' suelto.
         if (r.contrato === 'A002' || r.contrato === 'B003') {
+            r._cumpleReal = (r.dias >= 7 && r.horas >= 15);
+        } else if (r.contrato === 'A006' || r.contrato === 'A014' || r.contrato === 'B019') {
             r._cumpleReal = (r.dias >= 7 && r.horas >= 15);
         } else {
             r._cumpleReal = tieneRegalo || tienePagoB;
