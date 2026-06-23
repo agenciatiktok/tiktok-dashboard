@@ -513,15 +513,22 @@ async function cargarDatos(periodo) {
     renderVistas();
 }
 
+// v1.5.8: logica de Cumple centralizada -- usada por actualizarStats() y renderVistas().
+// Antes estaba duplicada en los dos lugares y se desincronizaba (un parche solo tocaba renderVistas).
+// REVERTIR: borrar esta funcion completa y restaurar los blocks duplicados (ver git log commit 1a65c98 para el texto original).
+function calcularCumpleReal(r) {
+    const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
+    const tienePagoB = (r.contrato && r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
+    if (r.contrato === 'A002' || r.contrato === 'B003') return (r.dias >= 7 && r.horas >= 15);
+    if (r.contrato === 'A006' || r.contrato === 'A014' || r.contrato === 'B019') return (r.dias >= 7 && r.horas >= 15);
+    return tieneRegalo || tienePagoB;
+}
+
 function actualizarStats() {
     const total = todosLosDatos.length;
     // v1.5.1: stats basados en cumple real (regalo/pago > 0)
     const esB = contrato && contrato.startsWith('B');
-    const cumplen = todosLosDatos.filter(r => {
-        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
-        const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
-        return tieneRegalo || tienePagoB;
-    }).length;
+    const cumplen = todosLosDatos.filter(calcularCumpleReal).length; // v1.5.8: funcion centralizada
     document.getElementById('stat-total').textContent = total;
     document.getElementById('stat-cumplen').textContent = cumplen;
     document.getElementById('stat-no').textContent = total - cumplen;
@@ -530,20 +537,7 @@ function actualizarStats() {
 function renderVistas() {
     let rows = todosLosDatos;
     // v1.5.1: pre-calcular _cumpleReal para todos antes de filtrar
-    rows.forEach(r => {
-        const tieneRegalo = r.paypal_incentivo > 0 || r.coins_incentivo > 0;
-        const tienePagoB = (r.contrato&&r.contrato.startsWith('B')) && (r.paypal_bruto > 0 || r.coins_bruto > 0);
-        // v1.5.7: EXCEPCION A002/B003 -- decision Angel 2026-06-22. Cumple = apto para regalo (7d/15h universal), NO regalo ya recibido. El agente decide el regalo aparte.
-        // v1.5.8: EXCEPCION A006/A014/B019 -- decision Angel 2026-06-22. Tipo EMPLEADO_4PCT_AUTONOMO: el empleado paga directo, sistema nunca calcula incentivo -> Cumple quedaria SIEMPRE en falso sin esto. Mismo criterio 7d/15h.
-        // REVERTIR: borrar este if/else if y dejar 'r._cumpleReal = tieneRegalo || tienePagoB;' suelto.
-        if (r.contrato === 'A002' || r.contrato === 'B003') {
-            r._cumpleReal = (r.dias >= 7 && r.horas >= 15);
-        } else if (r.contrato === 'A006' || r.contrato === 'A014' || r.contrato === 'B019') {
-            r._cumpleReal = (r.dias >= 7 && r.horas >= 15);
-        } else {
-            r._cumpleReal = tieneRegalo || tienePagoB;
-        }
-    });
+    rows.forEach(r => { r._cumpleReal = calcularCumpleReal(r); }); // v1.5.8: funcion centralizada
     if (filtroActual === 'si') rows = rows.filter(r =>  r._cumpleReal);
     if (filtroActual === 'no') rows = rows.filter(r => !r._cumpleReal);
     // v1.5.3: filtro por búsqueda de usuario
