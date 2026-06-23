@@ -271,6 +271,7 @@ let columnasOcultas = [], todosLosDatos = [], filtroActual = 'todos', modoOscuro
 let esVertex = false;
 let nivel1Tabla3 = false;
 let periodosDisponibles = []; // v1.5.0: guardamos para el selector de mes
+let precargaPromise = null; // v1.5.6: fix race condition Sin Datos
 
 window.onload = async function() {
     const token = new URLSearchParams(window.location.search).get('token');
@@ -307,6 +308,10 @@ async function iniciarApp() {
     // v1.5.3: mostrar pantalla de reglas — app sigue oculto hasta aceptar
     document.getElementById('reglas-screen').style.display = 'flex';
     // Precargar datos en background mientras el usuario lee las reglas
+    precargaPromise = precargarDatos();
+}
+
+async function precargarDatos() {
     const { data: eq } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo').or(`nexus_codigo.eq.${contrato},vertex_codigo.eq.${contrato}`).maybeSingle();
     if (eq) {
         contratoEquiv = eq.nexus_codigo === contrato ? eq.vertex_codigo : eq.nexus_codigo;
@@ -321,6 +326,7 @@ async function aceptarReglas() {
     document.getElementById('app').style.display = 'block';
     // Ahora sí podemos escribir en elementos del app
     document.getElementById('header-nombre').textContent = nombreContrato;
+    if (precargaPromise) await precargaPromise; // v1.5.6: fix race condition Sin Datos
     renderMesButtons(periodosDisponibles);
     if (periodosDisponibles.length) await cargarDatos(periodosDisponibles[0]);
     else {
