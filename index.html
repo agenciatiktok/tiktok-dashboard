@@ -253,7 +253,7 @@
                 <strong style="color:#ffcc00;display:block;margin-bottom:4px;">⚠️ NO ACUMULABLE</strong>
                 Los premios <b style="color:var(--text)">NO se acumulan entre meses</b>. Tienes 30 días tras el cierre para reclamar tu incentivo. Después de ese plazo expiran sin derecho a reclamación.
             </div>
-            <div style="margin-bottom:4px;">
+            <div id="soporte-block" style="margin-bottom:4px;">
                 <strong style="color:#22c55e;display:block;margin-bottom:4px;">💬 SOPORTE</strong>
                 Para dudas contacta a tu agente o escribe al <a href="https://wa.me/5215659842514" target="_blank" style="color:#22c55e;font-weight:bold;text-decoration:underline;">WhatsApp General (+52 1 56 5984 2514)</a>.
             </div>
@@ -307,6 +307,11 @@ async function iniciarApp() {
     document.getElementById('token-screen').style.display = 'none';
     // v1.5.3: mostrar pantalla de reglas — app sigue oculto hasta aceptar
     document.getElementById('reglas-screen').style.display = 'flex';
+    // v1.5.7: ocultar bloque SOPORTE -- A002/B003 (decision Angel 2026-06-22, telefono compromete). REVERTIR: quitar este if.
+    if (contrato === 'A002' || contrato === 'B003') {
+        const sb_el = document.getElementById('soporte-block');
+        if (sb_el) sb_el.style.display = 'none';
+    }
     // Precargar datos en background mientras el usuario lee las reglas
     precargaPromise = precargarDatos();
 }
