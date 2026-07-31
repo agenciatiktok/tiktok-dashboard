@@ -1,9 +1,14 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.0 — 2026-07-31
-  Consulta por token INDIVIDUAL (tabla tokens_jugadores), no token de contrato.
-  Muestra historico completo de UN jugador, cronologico, con grafica de diamantes.
+  VERSION: v1.1 — 2026-07-31
+
+  CHANGELOG:
+  v1.0 -- base: historial mensual + grafica de diamantes
+  v1.1 -- agregado: fecha de incorporacion en header, historial de nombres
+          anteriores (historico_usuarios), regalo (incentivo) por mes si
+          aplica, tabla de incentivos de referencia con columna resaltada
+          segun el contrato del jugador (nivel1_tabla3).
 -->
 <html lang="es">
 <head>
@@ -52,6 +57,17 @@
         }
         .main { max-width: 640px; margin: 0 auto; padding: 14px 12px 40px; }
 
+        .info-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 12px 14px; margin-bottom: 12px; font-size: 12px; color: var(--muted);
+        }
+        .info-card b { color: var(--text); }
+        .nombres-anteriores { margin-top: 6px; }
+        .nombre-pill {
+            display: inline-block; background: var(--surface2); border-radius: 12px;
+            padding: 2px 10px; font-size: 11px; margin: 2px 4px 2px 0; color: var(--text);
+        }
+
         .chart-card {
             background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
             padding: 14px; margin-bottom: 16px;
@@ -64,6 +80,7 @@
             background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--radius); padding: 12px 14px;
         }
+        .month-card.tiene-regalo { border-left: 3px solid var(--cyan); }
         .month-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
         .month-name { font-size: 14px; font-weight: 500; }
         .badge { font-size: 10px; padding: 3px 9px; border-radius: 12px; font-weight: 500; }
@@ -74,9 +91,20 @@
         .month-item { background: var(--surface2); border-radius: 6px; padding: 6px 8px; }
         .month-item-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
         .month-item-val { font-size: 12px; font-weight: 500; }
+        .month-item-val.regalo { color: var(--cyan); }
         .month-extra { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
         .month-extra-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
         .sin-dato { color: var(--muted); }
+
+        .tabla-incentivos-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 14px; margin-top: 16px;
+        }
+        .tabla-incentivos-nota { font-size: 11px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+        table.incentivos { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table.incentivos th { color: var(--muted); font-weight: 500; text-align: center; padding: 6px 4px; font-size: 10px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+        table.incentivos td { text-align: center; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+        table.incentivos th.col-activa, table.incentivos td.col-activa { background: rgba(0,242,234,0.08); color: var(--cyan); font-weight: 600; }
 
         .center-msg { text-align: center; padding: 50px 20px; color: var(--muted); }
         .center-msg b { display: block; font-size: 15px; color: var(--text); margin-bottom: 6px; }
@@ -163,12 +191,24 @@
         <button class="theme-btn" id="theme-btn" onclick="toggleTheme()">☀ Claro</button>
     </div>
     <div class="main">
+        <div class="info-card" id="info-card">
+            <div id="info-incorporacion">—</div>
+            <div id="info-nombres" class="nombres-anteriores"></div>
+        </div>
+
         <div class="chart-card">
             <div class="chart-title">💎 Diamantes por mes</div>
             <div class="chart-wrap"><canvas id="chart-diamantes"></canvas></div>
         </div>
+
         <div class="cards-list" id="cards-container">
             <div class="center-msg"><span class="spinner"></span> Cargando tu historial...</div>
+        </div>
+
+        <div class="tabla-incentivos-card" id="tabla-incentivos-card" style="display:none">
+            <div class="chart-title">🏆 Tabla de incentivos de referencia</div>
+            <div class="tabla-incentivos-nota" id="tabla-incentivos-nota"></div>
+            <div id="tabla-incentivos-wrap"></div>
         </div>
     </div>
 </div>
@@ -181,6 +221,10 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 let idTiktok = null;
 let modoOscuro = true;
 let historialCompleto = [];
+let nombresAnteriores = [];
+let fechaIncorporacion = null;
+let nivel1Tabla3Actual = false;
+let nivelActualReferencia = 1;
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 window.onload = async function() {
@@ -211,15 +255,15 @@ async function validarYEntrar(token) {
 
     document.getElementById('token-screen').style.display = 'none';
     document.getElementById('reglas-screen').style.display = 'flex';
-    precargarHistorial();
+    precargarTodo();
 }
 
-async function precargarHistorial() {
+async function precargarTodo() {
     let todas = [];
     let off = 0;
     while (true) {
         const { data } = await sb.from('usuarios_tiktok')
-            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,diamantes_partidas,diamantes_multi_invitado')
+            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,nivel,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,fecha_incorporacion,paypal_incentivo,coins_incentivo')
             .eq('id_tiktok', idTiktok)
             .range(off, off + 999);
         if (!data || !data.length) break;
@@ -228,9 +272,37 @@ async function precargarHistorial() {
         off += 1000;
     }
     historialCompleto = filtrarCierres(todas);
+
+    const conFecha = todas.find(f => f.fecha_incorporacion);
+    fechaIncorporacion = conFecha ? conFecha.fecha_incorporacion : null;
+
+    try {
+        const { data: hist } = await sb.from('historico_usuarios')
+            .select('usuario_1,usuario_2,usuario_3')
+            .eq('id_tiktok', idTiktok)
+            .order('visto_ultima_vez', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (hist) {
+            const candidatos = [hist.usuario_1, hist.usuario_2, hist.usuario_3].filter(Boolean);
+            nombresAnteriores = [...new Set(candidatos)];
+        }
+    } catch (e) {
+        nombresAnteriores = [];
+    }
+
+    if (historialCompleto.length) {
+        const contratoActual = historialCompleto[historialCompleto.length - 1].contrato;
+        try {
+            const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3').eq('codigo', contratoActual).maybeSingle();
+            nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
+        } catch (e) { nivel1Tabla3Actual = false; }
+
+        const nivelReal = historialCompleto[historialCompleto.length - 1].nivel || 0;
+        nivelActualReferencia = nivel1Tabla3Actual ? 3 : (nivelReal > 0 ? nivelReal : 1);
+    }
 }
 
-// Igual criterio que index.html: cierre de mes si existe, si no la fecha mas reciente de ese mes
 function filtrarCierres(filas) {
     const porMes = {};
     filas.forEach(f => {
@@ -248,7 +320,7 @@ function filtrarCierres(filas) {
         const cierre = arr.find(f => new Date(f.fecha_datos + 'T00:00:00').getDate() === ultimoDia);
         resultado.push(cierre || arr[0]);
     });
-    resultado.sort((a,b) => new Date(a.fecha_datos) - new Date(b.fecha_datos)); // cronologico ascendente
+    resultado.sort((a,b) => new Date(a.fecha_datos) - new Date(b.fecha_datos));
     return resultado;
 }
 
@@ -265,12 +337,33 @@ async function aceptarReglas() {
     if (!historialCompleto.length) {
         document.getElementById('cards-container').innerHTML = '<div class="center-msg"><b>Sin datos</b>Todavía no hay historial disponible.</div>';
         document.querySelector('.chart-card').style.display = 'none';
+        document.getElementById('info-card').style.display = 'none';
         return;
     }
 
     document.getElementById('header-nombre').textContent = historialCompleto[historialCompleto.length - 1].usuario || 'Jugador';
+    renderInfoCard();
     renderGrafica();
     renderCards();
+    await renderTablaIncentivos();
+}
+
+function renderInfoCard() {
+    if (fechaIncorporacion) {
+        const d = new Date(fechaIncorporacion + 'T00:00:00');
+        const texto = `${d.getDate()} de ${MESES[d.getMonth()]}, ${d.getFullYear()}`;
+        document.getElementById('info-incorporacion').innerHTML = `🗓️ En la agencia desde: <b>${texto}</b>`;
+    } else {
+        document.getElementById('info-incorporacion').innerHTML = `🗓️ Fecha de incorporación no disponible`;
+    }
+
+    const nombreActual = historialCompleto[historialCompleto.length - 1].usuario;
+    const otros = nombresAnteriores.filter(n => n && n !== nombreActual);
+    if (otros.length) {
+        let html = 'También conocido como: ';
+        otros.forEach(n => { html += `<span class="nombre-pill">@${esc(n)}</span>`; });
+        document.getElementById('info-nombres').innerHTML = html;
+    }
 }
 
 function renderGrafica() {
@@ -313,10 +406,23 @@ function renderCards() {
         const nombreMes = `${MESES[d.getMonth()]} ${d.getFullYear()}`;
         const ultimoDiaMes = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
         const esCierre = d.getDate() === ultimoDiaMes;
+        const tieneRegalo = (f.paypal_incentivo > 0) || (f.coins_incentivo > 0);
 
         const val = (v) => (v === null || v === undefined) ? '<span class="sin-dato">—</span>' : Number(v).toLocaleString('es-MX');
 
-        html += `<div class="month-card">
+        let regaloHtml = '';
+        if (f.paypal_incentivo > 0 || f.coins_incentivo > 0) {
+            regaloHtml = `<div class="month-extra-row" style="margin-top:6px;">`;
+            if (f.paypal_incentivo > 0) {
+                regaloHtml += `<div class="month-item"><div class="month-item-label">Regalo $</div><div class="month-item-val regalo">$${Number(f.paypal_incentivo).toFixed(2)}</div></div>`;
+            }
+            if (f.coins_incentivo > 0) {
+                regaloHtml += `<div class="month-item"><div class="month-item-label">Regalo 🪙</div><div class="month-item-val regalo">${Number(f.coins_incentivo).toLocaleString('es-MX')}</div></div>`;
+            }
+            regaloHtml += `</div>`;
+        }
+
+        html += `<div class="month-card${tieneRegalo ? ' tiene-regalo' : ''}">
             <div class="month-top">
                 <span class="month-name">${nombreMes}</span>
                 <span class="badge ${esCierre ? 'badge-cerrado' : 'badge-parcial'}">${esCierre ? 'Cerrado' : 'Parcial'}</span>
@@ -335,11 +441,44 @@ function renderCards() {
                     <div class="month-item"><div class="month-item-label">Fans totales</div><div class="month-item-val">${val(f.fans_totales)}</div></div>
                     <div class="month-item"><div class="month-item-label">Nuevos fans</div><div class="month-item-val">${val(f.nuevos_fans)}</div></div>
                 </div>
+                ${regaloHtml}
             </div>
         </div>`;
     });
     document.getElementById('cards-container').innerHTML = html;
 }
+
+async function renderTablaIncentivos() {
+    const { data } = await sb.from('incentivos_horizontales').select('*').order('acumulado');
+    if (!data || !data.length) return;
+
+    const colClass = (n) => n === nivelActualReferencia ? 'col-activa' : '';
+
+    let nota = nivel1Tabla3Actual
+        ? 'Tu contrato aplica siempre la columna <b>Nivel 3</b> si cumples el mínimo de días y horas, sin importar el nivel real alcanzado.'
+        : `Actualmente tu nivel de referencia es <b>Nivel ${nivelActualReferencia}</b> según tus días y horas del último periodo.`;
+    document.getElementById('tabla-incentivos-nota').innerHTML = nota;
+
+    let tabla = `<table class="incentivos"><thead><tr>
+        <th>Diamantes</th>
+        <th class="${colClass(1)}">Nivel 1</th>
+        <th class="${colClass(2)}">Nivel 2</th>
+        <th class="${colClass(3)}">Nivel 3</th>
+    </tr></thead><tbody>`;
+    data.forEach(row => {
+        tabla += `<tr>
+            <td>${Number(row.acumulado).toLocaleString('es-MX')}</td>
+            <td class="${colClass(1)}">$${Number(row.nivel_1_paypal).toFixed(2)}</td>
+            <td class="${colClass(2)}">$${Number(row.nivel_2_paypal).toFixed(2)}</td>
+            <td class="${colClass(3)}">$${Number(row.nivel_3_paypal).toFixed(2)}</td>
+        </tr>`;
+    });
+    tabla += '</tbody></table>';
+    document.getElementById('tabla-incentivos-wrap').innerHTML = tabla;
+    document.getElementById('tabla-incentivos-card').style.display = 'block';
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 function toggleTheme(){
     modoOscuro=!modoOscuro;
