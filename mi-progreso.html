@@ -193,6 +193,7 @@
     <div class="main">
         <div class="info-card" id="info-card">
             <div id="info-incorporacion">—</div>
+            <div id="info-contrato" style="margin-top:6px;"></div>
             <div id="info-nombres" class="nombres-anteriores"></div>
         </div>
 
@@ -263,7 +264,7 @@ async function precargarTodo() {
     let off = 0;
     while (true) {
         const { data } = await sb.from('usuarios_tiktok')
-            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,nivel,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,fecha_incorporacion,paypal_incentivo,coins_incentivo')
+            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,agente,nivel,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,fecha_incorporacion,paypal_incentivo,coins_incentivo')
             .eq('id_tiktok', idTiktok)
             .range(off, off + 999);
         if (!data || !data.length) break;
@@ -358,6 +359,14 @@ function renderInfoCard() {
     }
 
     const nombreActual = historialCompleto[historialCompleto.length - 1].usuario;
+    const contratoActual = historialCompleto[historialCompleto.length - 1].contrato;
+    const agenteActual = historialCompleto[historialCompleto.length - 1].agente;
+    if (contratoActual) {
+        let txt = `📋 Contrato: <b>${esc(contratoActual)}</b>`;
+        if (agenteActual) txt += ` — Agente: <b>${esc(agenteActual)}</b>`;
+        document.getElementById('info-contrato').innerHTML = txt;
+    }
+
     const otros = nombresAnteriores.filter(n => n && n !== nombreActual);
     if (otros.length) {
         let html = 'También conocido como: ';
@@ -424,7 +433,7 @@ function renderCards() {
 
         html += `<div class="month-card${tieneRegalo ? ' tiene-regalo' : ''}">
             <div class="month-top">
-                <span class="month-name">${nombreMes}</span>
+                <span class="month-name">${nombreMes}${esCierre ? '' : ` <span style="color:var(--muted);font-weight:400;font-size:12px;">(corte ${d.getDate()} de ${MESES[d.getMonth()]})</span>`}</span>
                 <span class="badge ${esCierre ? 'badge-cerrado' : 'badge-parcial'}">${esCierre ? 'Cerrado' : 'Parcial'}</span>
             </div>
             <div class="month-grid">
