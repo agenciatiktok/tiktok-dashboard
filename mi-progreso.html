@@ -170,7 +170,7 @@
                 <strong style="color:#ffcc00;display:block;margin-bottom:4px;">⚠️ NO ACUMULABLE</strong>
                 Los premios <b style="color:var(--text)">NO se acumulan entre meses</b>. Tienes 30 días tras el cierre para reclamar tu incentivo. Después de ese plazo expiran sin derecho a reclamación.
             </div>
-            <div style="margin-bottom:4px;">
+            <div style="margin-bottom:4px;" id="soporte-block">
                 <strong style="color:#22c55e;display:block;margin-bottom:4px;">💬 SOPORTE</strong>
                 Para dudas contacta a tu agente o escribe al <a href="https://wa.me/5215659842514" target="_blank" style="color:#22c55e;font-weight:bold;text-decoration:underline;">WhatsApp General (+52 1 56 5984 2514)</a>.
             </div>
@@ -297,26 +297,48 @@ async function precargarTodo() {
     }
     historialCompleto = filtrarCierres(todas);
 
+    // Cruce con reportes_contratos (igual que index.html) -- el pago real de
+    // muchos tipos de contrato (%, MEVAK, etc.) vive ahi, no en usuarios_tiktok directo
+    const contratosPresentes = [...new Set(historialCompleto.map(f => f.contrato).filter(Boolean))];
+    const fechasPresentes = historialCompleto.map(f => f.fecha_datos);
+    const reportesMap = {};
+    for (const c of contratosPresentes) {
+        if (c.toString().toUpperCase().startsWith('B')) continue; // Vertex no usa este mecanismo de Nexus
+        try {
+            const { data: reps } = await sb.from('reportes_contratos')
+                .select('periodo,usuario,paypal_bruto,paypal_incentivo,coins_bruto,coins_incentivo')
+                .eq('contrato', c)
+                .in_('periodo', fechasPresentes);
+            (reps || []).forEach(r => { reportesMap[`${r.periodo}|${r.usuario}`] = r; });
+        } catch (e) { /* si falla, se queda con los valores base de usuarios_tiktok */ }
+    }
+    historialCompleto = historialCompleto.map(f => {
+        const rep = reportesMap[`${f.fecha_datos}|${f.usuario}`];
+        if (!rep) return f;
+        return {
+            ...f,
+            paypal_bruto: parseFloat(rep.paypal_bruto || 0),
+            paypal_incentivo: parseFloat(rep.paypal_incentivo || 0),
+            coins_bruto: parseFloat(rep.coins_bruto || 0),
+            coins_incentivo: parseFloat(rep.coins_incentivo || 0),
+        };
+    });
+
     const conFecha = todas.find(f => f.fecha_incorporacion);
     fechaIncorporacion = conFecha ? conFecha.fecha_incorporacion : null;
 
-    try {
-        const { data: hist } = await sb.from('historico_usuarios')
-            .select('usuario_1,usuario_2,usuario_3')
-            .eq('id_tiktok', idTiktok)
-            .order('visto_ultima_vez', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-        if (hist) {
-            const candidatos = [hist.usuario_1, hist.usuario_2, hist.usuario_3].filter(Boolean);
-            nombresAnteriores = [...new Set(candidatos)];
-        }
-    } catch (e) {
-        nombresAnteriores = [];
-    }
+    // v1.6: ya no usamos lista generica de nombres anteriores -- cada tarjeta de mes
+    // muestra el nombre real que tenia el jugador EN ESE periodo (viene en cada fila)
 
     if (historialCompleto.length) {
         const contratoActual = historialCompleto[historialCompleto.length - 1].contrato;
+
+        // Misma regla que index.html v1.5.7: A002/B003 ocultan el bloque de soporte (telefono compromete)
+        if (contratoActual === 'A002' || contratoActual === 'B003') {
+            const sb_el = document.getElementById('soporte-block');
+            if (sb_el) sb_el.style.display = 'none';
+        }
+
         const esVertexActual = contratoActual && contratoActual.toString().toUpperCase().startsWith('B');
 
         if (!esVertexActual && contratoActual) {
@@ -324,7 +346,7 @@ async function precargarTodo() {
                 const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3,tipo_logica').eq('codigo', contratoActual).maybeSingle();
                 nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
                 tipoLogicaActual = cfg?.tipo_logica || null;
-                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA'].includes(tipoLogicaActual);
+                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA', 'HIBRIDO_MEVAK', 'EMPLEADO_4PCT_AUTONOMO'].includes(tipoLogicaActual);
             } catch (e) {
                 aplicaTablaHorizontal = false;
             }
@@ -399,13 +421,6 @@ function renderInfoCard() {
         let txt = `📋 Contrato: <b>${esc(contratoActual)}</b>`;
         if (agenteActual) txt += ` — Agente: <b>${esc(agenteActual)}</b>`;
         document.getElementById('info-contrato').innerHTML = txt;
-    }
-
-    const otros = nombresAnteriores.filter(n => n && n !== nombreActual);
-    if (otros.length) {
-        let html = 'También conocido como: ';
-        otros.forEach(n => { html += `<span class="nombre-pill">@${esc(n)}</span>`; });
-        document.getElementById('info-nombres').innerHTML = html;
     }
 }
 
@@ -497,6 +512,7 @@ function renderCards() {
                 <span class="month-name">${nombreMes}${esCierre ? '' : ` <span style="color:var(--muted);font-weight:400;font-size:12px;">(corte ${d.getDate()} de ${MESES[d.getMonth()]})</span>`}</span>
                 <span class="badge ${esCierre ? 'badge-cerrado' : 'badge-parcial'}">${esCierre ? 'Cerrado' : 'Parcial'}</span>
             </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">@${esc(f.usuario || '—')}</div>
             <div class="month-grid">
                 <div class="month-item"><div class="month-item-label">Días</div><div class="month-item-val">${f.dias ?? '—'}</div></div>
                 <div class="month-item"><div class="month-item-label">Horas</div><div class="month-item-val">${f.duracion || '—'}</div></div>
