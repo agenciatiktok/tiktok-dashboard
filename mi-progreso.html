@@ -202,14 +202,19 @@
             <div class="chart-wrap"><canvas id="chart-diamantes"></canvas></div>
         </div>
 
-        <div class="cards-list" id="cards-container">
-            <div class="center-msg"><span class="spinner"></span> Cargando tu historial...</div>
-        </div>
-
         <div class="tabla-incentivos-card" id="tabla-incentivos-card" style="display:none">
             <div class="chart-title">🏆 Tabla de incentivos de referencia</div>
             <div class="tabla-incentivos-nota" id="tabla-incentivos-nota"></div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+                Requisito mínimo por nivel — <b style="color:var(--text)">Nivel 1:</b> 7 días / 15h &nbsp;|&nbsp;
+                <b style="color:var(--text)">Nivel 2:</b> 14 días / 30h &nbsp;|&nbsp;
+                <b style="color:var(--text)">Nivel 3:</b> 20 días / 40h
+            </div>
             <div id="tabla-incentivos-wrap"></div>
+        </div>
+
+        <div class="cards-list" id="cards-container">
+            <div class="center-msg"><span class="spinner"></span> Cargando tu historial...</div>
         </div>
     </div>
 </div>
@@ -226,7 +231,20 @@ let nombresAnteriores = [];
 let fechaIncorporacion = null;
 let nivel1Tabla3Actual = false;
 let nivelActualReferencia = 1;
+let umbralMinimoDiamantes = 5000; // fallback, se actualiza con incentivos_horizontales real
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function parseHorasDecimal(duracion) {
+    if (!duracion) return 0;
+    const s = String(duracion);
+    const h = s.match(/(\d+)\s*h/i);
+    const m = s.match(/(\d+)\s*min/i);
+    const sec = s.match(/(\d+)\s*s/i);
+    const hh = h ? parseInt(h[1]) : 0;
+    const mm = m ? parseInt(m[1]) : 0;
+    const ss = sec ? parseInt(sec[1]) : 0;
+    return hh + (mm/60) + (ss/3600);
+}
 
 window.onload = async function() {
     const token = new URLSearchParams(window.location.search).get('token');
@@ -345,8 +363,8 @@ async function aceptarReglas() {
     document.getElementById('header-nombre').textContent = historialCompleto[historialCompleto.length - 1].usuario || 'Jugador';
     renderInfoCard();
     renderGrafica();
-    renderCards();
     await renderTablaIncentivos();
+    renderCards();
 }
 
 function renderInfoCard() {
@@ -419,6 +437,29 @@ function renderCards() {
 
         const val = (v) => (v === null || v === undefined) ? '<span class="sin-dato">—</span>' : Number(v).toLocaleString('es-MX');
 
+        const horasDecimal = parseHorasDecimal(f.duracion);
+        const cumpleMinimo = (f.dias || 0) >= 7 && horasDecimal >= 15;
+        const diamantes = f.diamantes || 0;
+
+        let notaMinimo = '';
+        if (!cumpleMinimo) {
+            const diasFaltan = Math.max(0, 7 - (f.dias || 0));
+            const horasFaltan = Math.max(0, 15 - horasDecimal);
+            if (esCierre) {
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de 7 días / 15 horas este mes.</div>`;
+            } else {
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:#ffcc00;">⏳ Aún no alcanzas el mínimo — faltan ${diasFaltan} día${diasFaltan===1?'':'s'} y/o ${horasFaltan.toFixed(1)}h para calificar.</div>`;
+            }
+        } else if (diamantes < umbralMinimoDiamantes) {
+            const diamFaltan = umbralMinimoDiamantes - diamantes;
+            if (esCierre) {
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">Cumpliste días/horas, pero faltaron ${diamFaltan.toLocaleString('es-MX')} 💎 para el primer regalo.</div>`;
+            } else {
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--cyan);">💎 Cumples días/horas — te faltan ${diamFaltan.toLocaleString('es-MX')} diamantes para tu primer regalo.</div>`;
+            }
+        }
+
+
         let regaloHtml = '';
         if (f.paypal_incentivo > 0 || f.coins_incentivo > 0) {
             regaloHtml = `<div class="month-extra-row" style="margin-top:6px;">`;
@@ -451,6 +492,7 @@ function renderCards() {
                     <div class="month-item"><div class="month-item-label">Nuevos fans</div><div class="month-item-val">${val(f.nuevos_fans)}</div></div>
                 </div>
                 ${regaloHtml}
+                ${notaMinimo}
             </div>
         </div>`;
     });
@@ -460,6 +502,8 @@ function renderCards() {
 async function renderTablaIncentivos() {
     const { data } = await sb.from('incentivos_horizontales').select('*').order('acumulado');
     if (!data || !data.length) return;
+
+    umbralMinimoDiamantes = Math.min(...data.map(r => Number(r.acumulado)));
 
     const colClass = (n) => n === nivelActualReferencia ? 'col-activa' : '';
 
