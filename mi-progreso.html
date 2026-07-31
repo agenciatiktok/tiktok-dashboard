@@ -202,6 +202,9 @@
             <div class="chart-wrap"><canvas id="chart-diamantes"></canvas></div>
         </div>
 
+        <div id="incentivos-toggle-wrap" style="text-align:center;margin-bottom:16px;display:none;">
+            <button class="theme-btn" onclick="toggleTablaIncentivos()" id="btn-toggle-incentivos">🏆 Ver tabla de incentivos</button>
+        </div>
         <div class="tabla-incentivos-card" id="tabla-incentivos-card" style="display:none">
             <div class="chart-title">🏆 Tabla de incentivos de referencia</div>
             <div class="tabla-incentivos-nota" id="tabla-incentivos-nota"></div>
@@ -230,6 +233,8 @@ let historialCompleto = [];
 let nombresAnteriores = [];
 let fechaIncorporacion = null;
 let nivel1Tabla3Actual = false;
+let aplicaTablaHorizontal = false;
+let tipoLogicaActual = null;
 let nivelActualReferencia = 1;
 let umbralMinimoDiamantes = 5000; // fallback, se actualiza con incentivos_horizontales real
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -312,10 +317,21 @@ async function precargarTodo() {
 
     if (historialCompleto.length) {
         const contratoActual = historialCompleto[historialCompleto.length - 1].contrato;
-        try {
-            const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3').eq('codigo', contratoActual).maybeSingle();
-            nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
-        } catch (e) { nivel1Tabla3Actual = false; }
+        const esVertexActual = contratoActual && contratoActual.toString().toUpperCase().startsWith('B');
+
+        if (!esVertexActual && contratoActual) {
+            try {
+                const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3,tipo_logica').eq('codigo', contratoActual).maybeSingle();
+                nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
+                tipoLogicaActual = cfg?.tipo_logica || null;
+                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA'].includes(tipoLogicaActual);
+            } catch (e) {
+                aplicaTablaHorizontal = false;
+            }
+        } else {
+            // Vertex tiene sus propias tablas/umbrales por contrato -- no mostramos la de Nexus
+            aplicaTablaHorizontal = false;
+        }
 
         const nivelReal = historialCompleto[historialCompleto.length - 1].nivel || 0;
         nivelActualReferencia = nivel1Tabla3Actual ? 3 : (nivelReal > 0 ? nivelReal : 1);
@@ -440,9 +456,13 @@ function renderCards() {
         const horasDecimal = parseHorasDecimal(f.duracion);
         const cumpleMinimo = (f.dias || 0) >= 7 && horasDecimal >= 15;
         const diamantes = f.diamantes || 0;
+        const esVertexRow = f.contrato && f.contrato.toString().toUpperCase().startsWith('B');
 
         let notaMinimo = '';
-        if (!cumpleMinimo) {
+        if (esVertexRow) {
+            // Vertex tiene umbrales propios por contrato -- no aplicamos la regla 7d/15h de Nexus aqui
+            notaMinimo = '';
+        } else if (!cumpleMinimo) {
             const diasFaltan = Math.max(0, 7 - (f.dias || 0));
             const horasFaltan = Math.max(0, 15 - horasDecimal);
             if (esCierre) {
@@ -450,7 +470,7 @@ function renderCards() {
             } else {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:#ffcc00;">⏳ Aún no alcanzas el mínimo — faltan ${diasFaltan} día${diasFaltan===1?'':'s'} y/o ${horasFaltan.toFixed(1)}h para calificar.</div>`;
             }
-        } else if (diamantes < umbralMinimoDiamantes) {
+        } else if (aplicaTablaHorizontal && diamantes < umbralMinimoDiamantes) {
             const diamFaltan = umbralMinimoDiamantes - diamantes;
             if (esCierre) {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">Cumpliste días/horas, pero faltaron ${diamFaltan.toLocaleString('es-MX')} 💎 para el primer regalo.</div>`;
@@ -500,6 +520,10 @@ function renderCards() {
 }
 
 async function renderTablaIncentivos() {
+    if (!aplicaTablaHorizontal) {
+        return; // % o Vertex -- esta tabla no le aplica, se omite por completo
+    }
+
     const { data } = await sb.from('incentivos_horizontales').select('*').order('acumulado');
     if (!data || !data.length) return;
 
@@ -528,7 +552,15 @@ async function renderTablaIncentivos() {
     });
     tabla += '</tbody></table>';
     document.getElementById('tabla-incentivos-wrap').innerHTML = tabla;
-    document.getElementById('tabla-incentivos-card').style.display = 'block';
+    document.getElementById('incentivos-toggle-wrap').style.display = 'block';
+}
+
+function toggleTablaIncentivos() {
+    const card = document.getElementById('tabla-incentivos-card');
+    const btn = document.getElementById('btn-toggle-incentivos');
+    const visible = card.style.display === 'block';
+    card.style.display = visible ? 'none' : 'block';
+    btn.textContent = visible ? '🏆 Ver tabla de incentivos' : '🏆 Ocultar tabla de incentivos';
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
