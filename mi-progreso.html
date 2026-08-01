@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
   VERSION: v1.1 — 2026-07-31
@@ -346,7 +346,7 @@ async function precargarTodo() {
                 const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3,tipo_logica').eq('codigo', contratoActual).maybeSingle();
                 nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
                 tipoLogicaActual = cfg?.tipo_logica || null;
-                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA', 'HIBRIDO_MEVAK', 'EMPLEADO_4PCT_AUTONOMO'].includes(tipoLogicaActual);
+                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA', 'HIBRIDO_MEVAK', 'EMPLEADO_4PCT_AUTONOMO', 'COMPLETO_5PCT_TABLA'].includes(tipoLogicaActual);
             } catch (e) {
                 aplicaTablaHorizontal = false;
             }
@@ -590,3 +590,4 @@ function toggleTheme(){
 </script>
 </body>
 </html>
+
