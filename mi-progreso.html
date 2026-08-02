@@ -239,20 +239,30 @@ let nivelActualReferencia = 1;
 let umbralMinimoDiamantes = 5000; // fallback, se actualiza con incentivos_horizontales real
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// Umbrales custom de Vertex por contrato (fuente: 02_incentivos_custom.csv, confirmado con Vertex 2026-08-01)
-// NO cubre B011/B018/B020 (usan tabla de tramos propia, no umbral simple -- NO se muestra mensaje aqui,
-// no se debe adivinar su logica) ni B001 (nunca paga regalo, no aplica mensaje de minimo).
-const UMBRALES_VERTEX = {
-    B002:{dias:8,horas:20}, B003:{dias:7,horas:15}, B004:{dias:10,horas:20}, B005:{dias:12,horas:20},
-    B006:{dias:10,horas:20}, B007:{dias:10,horas:20}, B008:{dias:7,horas:15}, B009:{dias:7,horas:15},
-    B010:{dias:7,horas:15}, B012:{dias:10,horas:20}, B013:{dias:7,horas:15}, B014:{dias:7,horas:15},
-    B015:{dias:10,horas:20}, B016:{dias:8,horas:20}, B017:{dias:7,horas:15}, B019:{dias:7,horas:15},
-    B021:{dias:10,horas:20}, B022:{dias:7,horas:15}, B023:{dias:8,horas:20}, B024:{dias:7,horas:15},
-    B025:{dias:7,horas:15}, B026:{dias:10,horas:20}, B027:{dias:8,horas:20}, B028:{dias:10,horas:20},
-    B029:{dias:7,horas:15},
-};
-const VERTEX_TABLA_PROPIA = ['B011', 'B018', 'B020']; // umbral por tramos, no simple -- no se muestra mensaje
-const VERTEX_SIN_REGALO = ['B001']; // nunca paga regalo -- no aplica mensaje
+// Umbrales custom de Vertex por contrato -- PENDIENTE: se leen en vivo de Supabase
+// una vez que Vertex confirme el nombre real de la tabla (nunca hardcodear su dato
+// de negocio aqui -- si ellos cambian un umbral, esta pagina debe reflejarlo sin
+// que nadie tenga que tocar codigo). Mientras tanto queda vacio -- comportamiento
+// seguro: no se muestra mensaje de minimo para B-series hasta tener la tabla real.
+let UMBRALES_VERTEX = {};
+let VERTEX_TABLA_PROPIA = [];
+let VERTEX_SIN_REGALO = [];
+
+async function cargarUmbralesVertex() {
+    // PENDIENTE: reemplazar 'TABLA_POR_CONFIRMAR' con el nombre real que confirme Vertex
+    try {
+        const { data } = await sb.from('TABLA_POR_CONFIRMAR').select('*');
+        if (data) {
+            data.forEach(row => {
+                if (row.sin_regalo) { VERTEX_SIN_REGALO.push(row.contrato); return; }
+                if (row.usa_tabla_propia) { VERTEX_TABLA_PROPIA.push(row.contrato); return; }
+                UMBRALES_VERTEX[row.contrato] = { dias: row.dias_min, horas: row.horas_min };
+            });
+        }
+    } catch (e) {
+        // Tabla aun no existe / nombre incorrecto -- se queda vacio, comportamiento seguro
+    }
+}
 
 function parseHorasDecimal(duracion) {
     if (!duracion) return 0;
@@ -298,6 +308,8 @@ async function validarYEntrar(token) {
 }
 
 async function precargarTodo() {
+    await cargarUmbralesVertex();
+
     let todas = [];
     let off = 0;
     while (true) {
