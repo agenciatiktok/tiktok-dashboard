@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
   VERSION: v1.1 — 2026-07-31
@@ -239,6 +239,21 @@ let nivelActualReferencia = 1;
 let umbralMinimoDiamantes = 5000; // fallback, se actualiza con incentivos_horizontales real
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// Umbrales custom de Vertex por contrato (fuente: 02_incentivos_custom.csv, confirmado con Vertex 2026-08-01)
+// NO cubre B011/B018/B020 (usan tabla de tramos propia, no umbral simple -- NO se muestra mensaje aqui,
+// no se debe adivinar su logica) ni B001 (nunca paga regalo, no aplica mensaje de minimo).
+const UMBRALES_VERTEX = {
+    B002:{dias:8,horas:20}, B003:{dias:7,horas:15}, B004:{dias:10,horas:20}, B005:{dias:12,horas:20},
+    B006:{dias:10,horas:20}, B007:{dias:10,horas:20}, B008:{dias:7,horas:15}, B009:{dias:7,horas:15},
+    B010:{dias:7,horas:15}, B012:{dias:10,horas:20}, B013:{dias:7,horas:15}, B014:{dias:7,horas:15},
+    B015:{dias:10,horas:20}, B016:{dias:8,horas:20}, B017:{dias:7,horas:15}, B019:{dias:7,horas:15},
+    B021:{dias:10,horas:20}, B022:{dias:7,horas:15}, B023:{dias:8,horas:20}, B024:{dias:7,horas:15},
+    B025:{dias:7,horas:15}, B026:{dias:10,horas:20}, B027:{dias:8,horas:20}, B028:{dias:10,horas:20},
+    B029:{dias:7,horas:15},
+};
+const VERTEX_TABLA_PROPIA = ['B011', 'B018', 'B020']; // umbral por tramos, no simple -- no se muestra mensaje
+const VERTEX_SIN_REGALO = ['B001']; // nunca paga regalo -- no aplica mensaje
+
 function parseHorasDecimal(duracion) {
     if (!duracion) return 0;
     const s = String(duracion);
@@ -346,7 +361,7 @@ async function precargarTodo() {
                 const { data: cfg } = await sb.from('contratos').select('nivel1_tabla3,tipo_logica').eq('codigo', contratoActual).maybeSingle();
                 nivel1Tabla3Actual = cfg?.nivel1_tabla3 === true;
                 tipoLogicaActual = cfg?.tipo_logica || null;
-                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA', 'HIBRIDO_MEVAK', 'EMPLEADO_4PCT_AUTONOMO', 'COMPLETO_5PCT_TABLA'].includes(tipoLogicaActual);
+                aplicaTablaHorizontal = ['EMPLEADO_ESTANDAR', 'EMPLEADO_TABLA_LIMITADA', 'HIBRIDO_MEVAK', 'EMPLEADO_4PCT_AUTONOMO'].includes(tipoLogicaActual);
             } catch (e) {
                 aplicaTablaHorizontal = false;
             }
@@ -458,6 +473,16 @@ function renderGrafica() {
 }
 
 function renderCards() {
+    // Detectar en que fechas cambio el contrato respecto al mes cronologico anterior
+    const fechasConCambioContrato = new Set();
+    let contratoPrevio = null;
+    historialCompleto.forEach(f => {
+        if (contratoPrevio !== null && f.contrato && f.contrato !== contratoPrevio) {
+            fechasConCambioContrato.add(f.fecha_datos);
+        }
+        if (f.contrato) contratoPrevio = f.contrato;
+    });
+
     let html = '';
     [...historialCompleto].reverse().forEach(f => {
         const d = new Date(f.fecha_datos + 'T00:00:00');
@@ -469,15 +494,33 @@ function renderCards() {
         const val = (v) => (v === null || v === undefined) ? '<span class="sin-dato">—</span>' : Number(v).toLocaleString('es-MX');
 
         const horasDecimal = parseHorasDecimal(f.duracion);
-        const cumpleMinimo = (f.dias || 0) >= 7 && horasDecimal >= 15;
         const diamantes = f.diamantes || 0;
         const esVertexRow = f.contrato && f.contrato.toString().toUpperCase().startsWith('B');
+        const contratoUpper = f.contrato ? f.contrato.toString().toUpperCase() : '';
 
         let notaMinimo = '';
+
         if (esVertexRow) {
-            // Vertex tiene umbrales propios por contrato -- no aplicamos la regla 7d/15h de Nexus aqui
-            notaMinimo = '';
-        } else if (!cumpleMinimo) {
+            if (VERTEX_SIN_REGALO.includes(contratoUpper) || VERTEX_TABLA_PROPIA.includes(contratoUpper)) {
+                // B001 no paga regalo; B011/B018/B020 usan tabla de tramos propia -- no se adivina, no se muestra
+                notaMinimo = '';
+            } else if (UMBRALES_VERTEX[contratoUpper]) {
+                const umbral = UMBRALES_VERTEX[contratoUpper];
+                const cumpleVertex = (f.dias || 0) >= umbral.dias && horasDecimal >= umbral.horas;
+                if (!cumpleVertex) {
+                    const diasFaltan = Math.max(0, umbral.dias - (f.dias || 0));
+                    const horasFaltan = Math.max(0, umbral.horas - horasDecimal);
+                    if (esCierre) {
+                        notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de ${umbral.dias} días / ${umbral.horas} horas este mes.</div>`;
+                    } else {
+                        notaMinimo = `<div style="margin-top:8px;font-size:11px;color:#ffcc00;">⏳ Aún no alcanzas el mínimo — faltan ${diasFaltan} día${diasFaltan===1?'':'s'} y/o ${horasFaltan.toFixed(1)}h para calificar.</div>`;
+                    }
+                }
+            }
+            // contrato B no reconocido en ninguna lista -- se deja sin mensaje, no se inventa umbral
+        } else {
+            const cumpleMinimo = (f.dias || 0) >= 7 && horasDecimal >= 15;
+            if (!cumpleMinimo) {
             const diasFaltan = Math.max(0, 7 - (f.dias || 0));
             const horasFaltan = Math.max(0, 15 - horasDecimal);
             if (esCierre) {
@@ -493,9 +536,13 @@ function renderCards() {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--cyan);">💎 Cumples días/horas — te faltan ${diamFaltan.toLocaleString('es-MX')} diamantes para tu primer regalo.</div>`;
             }
         }
+        }
 
 
         let regaloHtml = '';
+        const avisoCambioContrato = fechasConCambioContrato.has(f.fecha_datos)
+            ? `<div style="margin-bottom:8px;font-size:11px;background:rgba(255,204,0,0.1);border:1px solid #ffcc00;border-radius:6px;padding:6px 10px;color:#ffcc00;">🔄 Este mes cambiaste de contrato -- las reglas de mínimo/regalo pueden ser distintas a las de meses anteriores.</div>`
+            : '';
         if (f.paypal_incentivo > 0 || f.coins_incentivo > 0) {
             regaloHtml = `<div class="month-extra-row" style="margin-top:6px;">`;
             if (f.paypal_incentivo > 0) {
@@ -513,6 +560,7 @@ function renderCards() {
                 <span class="badge ${esCierre ? 'badge-cerrado' : 'badge-parcial'}">${esCierre ? 'Cerrado' : 'Parcial'}</span>
             </div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">@${esc(f.usuario || '—')}</div>
+            ${avisoCambioContrato}
             <div class="month-grid">
                 <div class="month-item"><div class="month-item-label">Días</div><div class="month-item-val">${f.dias ?? '—'}</div></div>
                 <div class="month-item"><div class="month-item-label">Horas</div><div class="month-item-val">${f.duracion || '—'}</div></div>
@@ -590,4 +638,3 @@ function toggleTheme(){
 </script>
 </body>
 </html>
-
