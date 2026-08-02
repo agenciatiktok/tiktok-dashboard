@@ -239,28 +239,28 @@ let nivelActualReferencia = 1;
 let umbralMinimoDiamantes = 5000; // fallback, se actualiza con incentivos_horizontales real
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// Umbrales custom de Vertex por contrato -- PENDIENTE: se leen en vivo de Supabase
-// una vez que Vertex confirme el nombre real de la tabla (nunca hardcodear su dato
-// de negocio aqui -- si ellos cambian un umbral, esta pagina debe reflejarlo sin
-// que nadie tenga que tocar codigo). Mientras tanto queda vacio -- comportamiento
-// seguro: no se muestra mensaje de minimo para B-series hasta tener la tabla real.
+// Umbrales custom de Vertex por contrato -- se leen en vivo de Supabase
+// (tabla incentivos_custom_vertex, confirmada y mantenida por Vertex via su
+// propio pipeline automatico, mismo patron que tokens_jugadores). Nunca se
+// hardcodea aqui -- si Vertex cambia un umbral, se refleja solo, sin tocar
+// codigo. Mientras la tabla este vacia, comportamiento seguro: no se
+// muestra mensaje de minimo para B-series.
 let UMBRALES_VERTEX = {};
 let VERTEX_TABLA_PROPIA = [];
 let VERTEX_SIN_REGALO = [];
 
 async function cargarUmbralesVertex() {
-    // PENDIENTE: reemplazar 'TABLA_POR_CONFIRMAR' con el nombre real que confirme Vertex
     try {
-        const { data } = await sb.from('TABLA_POR_CONFIRMAR').select('*');
+        const { data } = await sb.from('incentivos_custom_vertex').select('*');
         if (data) {
             data.forEach(row => {
-                if (row.sin_regalo) { VERTEX_SIN_REGALO.push(row.contrato); return; }
-                if (row.usa_tabla_propia) { VERTEX_TABLA_PROPIA.push(row.contrato); return; }
-                UMBRALES_VERTEX[row.contrato] = { dias: row.dias_min, horas: row.horas_min };
+                if (row.sin_regalo) { VERTEX_SIN_REGALO.push(row.codigo); return; }
+                if (row.usa_tabla_propia) { VERTEX_TABLA_PROPIA.push(row.codigo); return; }
+                UMBRALES_VERTEX[row.codigo] = { dias: row.dias_min, horas: row.horas_min };
             });
         }
     } catch (e) {
-        // Tabla aun no existe / nombre incorrecto -- se queda vacio, comportamiento seguro
+        // Tabla vacia o RLS aun no habilitado -- se queda vacio, comportamiento seguro
     }
 }
 
