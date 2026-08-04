@@ -335,9 +335,9 @@ async function precargarTodo() {
             const { data: reps } = await sb.from('reportes_contratos')
                 .select('periodo,usuario,paypal_bruto,paypal_incentivo,coins_bruto,coins_incentivo')
                 .eq('contrato', c)
-                .in_('periodo', fechasPresentes);
+                .in('periodo', fechasPresentes);
             (reps || []).forEach(r => { reportesMap[`${r.periodo}|${r.usuario}`] = r; });
-        } catch (e) { /* si falla, se queda con los valores base de usuarios_tiktok */ }
+        } catch (e) { console.error('Error cruzando reportes_contratos para', c, ':', e); }
     }
     historialCompleto = historialCompleto.map(f => {
         const rep = reportesMap[`${f.fecha_datos}|${f.usuario}`];
