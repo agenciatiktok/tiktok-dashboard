@@ -237,6 +237,24 @@ function fmtMoney(v){
 function esSerieB(codigo){
   return /^B/i.test(String(codigo||''));
 }
+
+// Supabase regresa max 1000 filas por default -- esto pagina hasta traer todo
+async function fetchAllPaged(table, selectStr, applyFilters){
+  let all = [];
+  let from = 0;
+  const pageSize = 1000;
+  while(true){
+    let q = sb.from(table).select(selectStr).range(from, from + pageSize - 1);
+    if(applyFilters) q = applyFilters(q);
+    const { data, error } = await q;
+    if(error) throw error;
+    if(!data || data.length === 0) break;
+    all = all.concat(data);
+    if(data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 function mostrarErrorGlobal(msg){
   document.getElementById('errGlobal').innerHTML =
     `<div class="errBox">⚠️ ${msg}</div>`;
@@ -329,13 +347,11 @@ async function iniciarApp(){
 async function cargarContratosYEquivalencias(){
   // 1) Contratos reales: distinct 'contrato' desde usuarios_tiktok (fuente de verdad,
   //    no dependemos de que la tabla 'contratos' tenga las filas B-series)
+  //    PAGINADO: Supabase corta en 1000 filas por default, si no paginamos
+  //    los contratos que aparecen despues de la fila 1000 nunca se ven (esto
+  //    era el bug de "Solo Vertex" vacio).
   try{
-    const { data, error } = await sb
-      .from('usuarios_tiktok')
-      .select('contrato')
-      .not('contrato', 'is', null);
-    if(error) throw error;
-
+    const data = await fetchAllPaged('usuarios_tiktok', 'contrato', q => q.not('contrato', 'is', null));
     const set = new Set((data||[]).map(r => r.contrato).filter(Boolean));
     ESTADO.contratosTodos = Array.from(set).sort();
   }catch(e){
@@ -499,8 +515,8 @@ async function cargarPeriodo(periodo){
       data = r2.data;
     }
 
-    // 2) Sueldo del CONTRATO (manager) este periodo — resumen_contratos.total_final
-    let sueldoContrato = null;
+    // 2) Sueldo del CONTRATO (manager) este periodo — resumen_contratos completo
+    let resumenContrato = null;
     try{
       const { data: resumen, error: errResumen } = await sb
         .from('resumen_contratos')
@@ -508,7 +524,7 @@ async function cargarPeriodo(periodo){
         .eq('contrato', ESTADO.contratoAbierto)
         .eq('periodo', periodo);
       if(!errResumen && resumen && resumen.length){
-        sueldoContrato = resumen[0].total_final ?? null;
+        resumenContrato = resumen[0];
       }
     }catch(e){ /* silencioso: resumen_contratos puede no existir para B-series */ }
 
@@ -527,9 +543,41 @@ async function cargarPeriodo(periodo){
       }catch(e){ /* silencioso */ }
     }
 
-    renderTablaUsuarios(data || [], periodo, sueldoContrato, incentivoPorUsuario);
+    // 4) Resolver usuarios en blanco: si 'usuario' viene vacio, buscar el ultimo
+    //    nombre conocido de ese id_tiktok en cualquier otro periodo
+    const fallbackUsuarios = await resolverUsuariosFaltantes(data || []);
+
+    renderTablaUsuarios(data || [], periodo, resumenContrato, incentivoPorUsuario, fallbackUsuarios);
   }catch(e){
     wrap.innerHTML = `<div class="errBox">⚠️ Error cargando el periodo: ${e.message}</div>`;
+  }
+}
+
+async function resolverUsuariosFaltantes(rows){
+  const faltantes = [...new Set(rows.filter(r => !r.usuario).map(r => r.id_tiktok))];
+  if(faltantes.length === 0) return {};
+
+  try{
+    const { data, error } = await sb
+      .from('usuarios_tiktok')
+      .select('id_tiktok, usuario, fecha_periodo, fecha_datos')
+      .in('id_tiktok', faltantes)
+      .not('usuario', 'is', null);
+    if(error) throw error;
+
+    const masReciente = {};
+    (data || []).forEach(r => {
+      const k = periodoKeyDe(r) || '';
+      if(!masReciente[r.id_tiktok] || k > masReciente[r.id_tiktok].k){
+        masReciente[r.id_tiktok] = { usuario: r.usuario, k };
+      }
+    });
+
+    const resultado = {};
+    Object.keys(masReciente).forEach(id => { resultado[id] = masReciente[id].usuario; });
+    return resultado;
+  }catch(e){
+    return {};
   }
 }
 
@@ -565,7 +613,7 @@ function renderIncentivoTexto(row, repRow){
   return '—';
 }
 
-function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario){
+function renderTablaUsuarios(rows, periodo, resumenContrato, incentivoPorUsuario, fallbackUsuarios){
   const wrap = document.getElementById('tablaWrap');
   if(rows.length === 0){
     wrap.innerHTML = '<p class="smallNote">Sin jugadores en este periodo.</p>';
@@ -573,6 +621,7 @@ function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario)
   }
 
   const marcable = esPeriodoMarcable(periodo);
+  fallbackUsuarios = fallbackUsuarios || {};
 
   // Orden: mayor dias, luego mayor horas
   const rowsOrdenadas = [...rows].sort((a,b) => {
@@ -589,9 +638,13 @@ function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario)
 
   const filas = rowsOrdenadas.map(r => {
     const repRow = incentivoPorUsuario[r.id_tiktok] || incentivoPorUsuario[r.id] || null;
+    const nombreMostrar = r.usuario || fallbackUsuarios[r.id_tiktok];
+    const esFallback = !r.usuario && !!fallbackUsuarios[r.id_tiktok];
     return `
     <tr class="userRow" data-id="${r.id_tiktok}">
-      <td onclick="abrirHistorial('${r.id_tiktok}')" style="color:var(--cyan); cursor:pointer; font-weight:bold;">${r.usuario || '(sin nombre)'}</td>
+      <td onclick="abrirHistorial('${r.id_tiktok}')" style="color:var(--cyan); cursor:pointer; font-weight:bold;">
+        ${nombreMostrar || '(sin nombre)'}${esFallback ? ' <span class="smallNote" title="Nombre tomado de otro periodo, este periodo vino en blanco">(hist.)</span>' : ''}
+      </td>
       <td class="smallNote">${r.id_tiktok}</td>
       <td>${r.dias ?? '—'}</td>
       <td>${r.horas ?? '—'}</td>
@@ -602,15 +655,29 @@ function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario)
     </tr>
   `;}).join('');
 
+  const totalCoins = resumenContrato ? Number(resumenContrato.total_coins || 0) : null;
+  const totalPaypal = resumenContrato ? Number(resumenContrato.total_paypal || 0) : null;
+  const totalFinal = resumenContrato ? Number(resumenContrato.total_final || 0) : null;
+  const usuariosValidos = resumenContrato ? resumenContrato.usuarios_validos : null;
+
   wrap.innerHTML = `
     ${marcable ? '' : '<div class="histBadge" style="margin-bottom:8px;">📜 Periodo histórico — solo lectura, no se puede marcar (regla: pagos válidos desde 2026)</div>'}
 
-    <div style="background:var(--panel); border:2px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-      <div>
-        <div class="smallNote">💰 SUELDO DEL CONTRATO (manager) — este periodo</div>
-        <div style="font-size:22px; font-weight:bold; color:var(--cyan);">${sueldoContrato !== null ? fmtMoney(sueldoContrato) : 'Sin dato (resumen_contratos vacío)'}</div>
+    <div style="background:var(--panel); border:2px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+        <div>
+          <div class="smallNote">💰 SUELDO DEL CONTRATO (manager) — este periodo</div>
+          <div style="font-size:22px; font-weight:bold; color:var(--cyan);">${totalFinal !== null ? fmtMoney(totalFinal) : 'Sin dato (resumen_contratos vacío)'}</div>
+        </div>
+        <div>${renderToggleSueldoContrato(sueldoPagado, confirmadoPorSueldo, fechaPagoSueldo, marcable)}</div>
       </div>
-      <div>${renderToggleSueldoContrato(sueldoPagado, confirmadoPorSueldo, fechaPagoSueldo, marcable)}</div>
+      ${resumenContrato ? `
+        <div style="display:flex; gap:24px; margin-top:12px; flex-wrap:wrap; font-size:14px; color:var(--gray);">
+          <div>🎁 Total Coins: <b style="color:var(--white);">${totalCoins.toLocaleString('es-MX')}</b></div>
+          <div>💵 Total PayPal: <b style="color:var(--white);">${fmtMoney(totalPaypal)}</b></div>
+          <div>👥 Usuarios que cumplen: <b style="color:var(--white);">${usuariosValidos ?? '—'}</b></div>
+        </div>
+      ` : ''}
     </div>
 
     <table>
@@ -622,6 +689,13 @@ function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario)
       </thead>
       <tbody>${filas}</tbody>
     </table>
+
+    <div style="margin-top:18px;">
+      <button class="btn btn-secondary" onclick="toggleMatrizMultiMes('${ESTADO.contratoAbierto}')" id="btnMatriz">
+        📊 Ver histórico multi-mes de este contrato
+      </button>
+      <div id="matrizMultiMesWrap" class="hidden" style="margin-top:14px;"></div>
+    </div>
   `;
 }
 
@@ -655,6 +729,99 @@ function renderToggleSueldoContrato(pagado, confirmadoPor, fechaPago, marcable){
             ${icono} ${label}
           </span>`;
 }
+
+// ================================================================
+// MATRIZ MULTI-MES (tipo CRUCE_UMBRAL_PAREADOS.py, dentro del panel)
+// ================================================================
+let matrizCache = {}; // contrato -> html ya armado, para no recalcular al toggle
+
+async function toggleMatrizMultiMes(contrato){
+  const wrap = document.getElementById('matrizMultiMesWrap');
+  const abierta = !wrap.classList.contains('hidden');
+
+  if(abierta){
+    wrap.classList.add('hidden');
+    return;
+  }
+
+  wrap.classList.remove('hidden');
+
+  if(matrizCache[contrato]){
+    wrap.innerHTML = matrizCache[contrato];
+    return;
+  }
+
+  wrap.innerHTML = '<p class="loading">Cargando historial completo del contrato...</p>';
+
+  try{
+    const rows = await fetchAllPaged('usuarios_tiktok', '*', q => q.eq('contrato', contrato));
+
+    if(!rows || rows.length === 0){
+      wrap.innerHTML = '<p class="smallNote">Sin historial.</p>';
+      return;
+    }
+
+    // resolver usuarios en blanco tambien aqui
+    const fallback = await resolverUsuariosFaltantes(rows);
+
+    // periodos distintos, mas recientes primero, tope de 6 meses para no saturar
+    const periodosSet = new Set(rows.map(r => periodoKeyDe(r)).filter(Boolean));
+    const periodos = Array.from(periodosSet).sort().reverse().slice(0, 6);
+    const periodosAsc = [...periodos].reverse(); // mostrar cronologico izq->der
+
+    // pivot: id_tiktok -> { usuario, [periodo]: {dias,horas,cumple} }
+    const pivot = {};
+    rows.forEach(r => {
+      const k = periodoKeyDe(r);
+      if(!periodos.includes(k)) return;
+      const id = r.id_tiktok;
+      if(!pivot[id]) pivot[id] = { usuario: r.usuario || fallback[id] || '(sin nombre)', datos:{} };
+      pivot[id].datos[k] = { dias:r.dias, horas:r.horas, cumple:r.cumple };
+      if(r.usuario) pivot[id].usuario = r.usuario; // preferir nombre real si aparece en cualquier mes
+    });
+
+    // ordenar por dias/horas del periodo mas reciente
+    const idsOrdenados = Object.keys(pivot).sort((a,b) => {
+      const da = pivot[a].datos[periodos[0]]?.dias ?? -1;
+      const db = pivot[b].datos[periodos[0]]?.dias ?? -1;
+      if(db !== da) return db - da;
+      const ha = pivot[a].datos[periodos[0]]?.horas ?? -1;
+      const hb = pivot[b].datos[periodos[0]]?.horas ?? -1;
+      return hb - ha;
+    });
+
+    const headerCols = periodosAsc.map(p => `<th>${fmtFecha(p)}</th>`).join('');
+
+    const filas = idsOrdenados.map(id => {
+      const nombre = pivot[id].usuario;
+      const celdas = periodosAsc.map(p => {
+        const d = pivot[id].datos[p];
+        if(!d) return `<td class="smallNote">—</td>`;
+        const cumple = String(d.cumple).toUpperCase() === 'SI' || d.cumple === true;
+        const color = cumple ? 'var(--green)' : 'var(--red)';
+        return `<td style="color:${color}; font-weight:bold;">${d.dias ?? 0}d / ${d.horas ?? 0}h</td>`;
+      }).join('');
+      return `<tr><td style="color:var(--cyan); font-weight:bold;">${nombre}</td><td class="smallNote">${id}</td>${celdas}</tr>`;
+    }).join('');
+
+    const html = `
+      <p class="smallNote">Últimos ${periodos.length} periodos disponibles, más reciente primero en el orden de la fila, columnas en orden cronológico.</p>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr><th>Usuario</th><th>ID</th>${headerCols}</tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>
+    `;
+
+    matrizCache[contrato] = html;
+    wrap.innerHTML = html;
+
+  }catch(e){
+    wrap.innerHTML = `<div class="errBox">⚠️ Error armando la matriz: ${e.message}</div>`;
+  }
+}
+
 
 // ================================================================
 // CONFIRMACIÓN DE PAGO (preview + confirmar, con seguro)
@@ -872,7 +1039,7 @@ async function buscarUsuario(q){
       query = query.eq('contrato', ESTADO.contrato);
     }
 
-    const { data, error } = await query.limit(200);
+    const { data, error } = await query.range(0, 999);
     if(error) throw error;
 
     if(!data || data.length === 0){
