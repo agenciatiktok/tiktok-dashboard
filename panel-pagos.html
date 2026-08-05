@@ -841,12 +841,79 @@ function renderSeccionEquipo(){
     </div>
   `).join('');
 
+  // Disparar el calculo de la suma total del equipo (async, no bloquea el render de la tabla)
+  setTimeout(() => cargarResumenEquipo(), 0);
+
   return `
     <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
       <div style="font-size:16px; font-weight:bold; color:var(--cyan); margin-bottom:10px;">
         👥 Tu equipo — contratos que te reportan
       </div>
       <div class="contractGrid">${tarjetas}</div>
+      <div id="resumenEquipoWrap"></div>
+    </div>
+  `;
+}
+
+// Suma total del equipo: sueldo del manager actual + de cada subordinado,
+// desglosado uno por uno y con el total abajo -- para que Hayaris (o quien
+// sea) no tenga que sumar a mano lo que recibe de todo su equipo.
+async function cargarResumenEquipo(){
+  const wrap = document.getElementById('resumenEquipoWrap');
+  if(!wrap) return;
+
+  const equipo = ESTADO.subordinadosActuales || [];
+  if(equipo.length === 0){ wrap.innerHTML = ''; return; }
+
+  wrap.innerHTML = '<p class="loading" style="margin-top:10px;">Calculando total del equipo...</p>';
+
+  const codigoBase = ESTADO.contratoAbierto;
+  const todos = [codigoBase, ...equipo.map(s => s.contrato)];
+
+  const filas = [];
+  let totalGeneral = 0;
+  let faltanDatos = false;
+
+  for(const c of todos){
+    let monto = null;
+    try{
+      const periodos = await obtenerPeriodosDeContrato(c);
+      if(periodos.length){
+        const { data } = await sb
+          .from('resumen_contratos')
+          .select('total_final')
+          .eq('contrato', c)
+          .eq('periodo', periodos[0])
+          .maybeSingle();
+        if(data && data.total_final !== null && data.total_final !== undefined){
+          monto = Number(data.total_final);
+        }
+      }
+    }catch(e){ /* silencioso */ }
+
+    if(monto !== null){
+      totalGeneral += monto;
+    } else {
+      faltanDatos = true;
+    }
+    filas.push({ contrato:c, monto });
+  }
+
+  const filasHtml = filas.map(f => `
+    <div style="display:flex; justify-content:space-between; max-width:420px; padding:4px 0;">
+      <span>${f.contrato}${f.contrato === codigoBase ? ' (tú)' : ''}</span>
+      <span>${f.monto !== null ? fmtMoney(f.monto) : 'Sin dato'}</span>
+    </div>
+  `).join('');
+
+  wrap.innerHTML = `
+    <div style="background:var(--panel); border:2px solid var(--cyan); border-radius:10px; padding:14px 18px; margin-top:14px;">
+      <div class="smallNote">💰 SUMA TOTAL DEL EQUIPO — este periodo (tú + todos los que te reportan)</div>
+      <div style="margin-top:8px;">${filasHtml}</div>
+      <div style="display:flex; justify-content:space-between; max-width:420px; padding:6px 0; border-top:1px solid var(--border); margin-top:6px; font-weight:bold; font-size:18px;">
+        <span>TOTAL</span><span style="color:var(--cyan);">${fmtMoney(totalGeneral)}</span>
+      </div>
+      ${faltanDatos ? '<div class="smallNote" style="color:var(--pink); margin-top:6px;">⚠️ Algún(os) contrato(s) no tienen dato confirmado en resumen_contratos — no se sumaron, el total puede estar incompleto.</div>' : ''}
     </div>
   `;
 }
