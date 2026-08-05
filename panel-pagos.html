@@ -226,8 +226,11 @@ function esPeriodoMarcable(periodoStr){
 function fmtFecha(f){
   if(!f) return '—';
   try{
-    const d = new Date(f);
-    return d.toLocaleDateString('es-MX', {year:'numeric', month:'short', day:'numeric'});
+    // Parseo manual para evitar que new Date("YYYY-MM-DD") lo lea como UTC
+    // y se recorra un dia hacia atras en zonas horarias negativas (ej. Merida, UTC-6)
+    const [y, m, d] = String(f).slice(0,10).split('-').map(Number);
+    const dt = new Date(y, m - 1, d); // fecha local, sin shift de UTC
+    return dt.toLocaleDateString('es-MX', {year:'numeric', month:'short', day:'numeric'});
   }catch(e){ return f; }
 }
 function fmtMoney(v){
