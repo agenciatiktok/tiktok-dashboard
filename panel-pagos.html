@@ -171,6 +171,7 @@
       <div class="topBar">
         <div>
           <button class="btn btn-secondary" onclick="volverASecciones()" id="btnVolver">← Volver</button>
+          <button class="btn btn-secondary" onclick="abrirContrato(ESTADO.contratoPropio)" id="btnVolverPropio" style="display:none; margin-left:8px;">⬆ Volver a mi contrato</button>
           <b id="contractTitle" style="font-size:20px; color:var(--cyan); margin-left:10px;"></b>
         </div>
         <div>
@@ -209,6 +210,8 @@ let ESTADO = {
   equivMap: {},             // código -> código pareja
   seccionActiva: 'pares',
   contratoAbierto: null,
+  contratoPropio: null,      // contrato del manager logueado, para "volver a mi contrato"
+  subordinadosActuales: [],  // contratos que reportan al contrato abierto ahora
   periodoActual: null
 };
 
@@ -307,6 +310,7 @@ async function intentarLogin(){
     ESTADO.token = token;
     ESTADO.tipo = rowToken.tipo === 'admin' ? 'admin' : 'contrato';
     ESTADO.contrato = rowToken.contrato || null;
+    ESTADO.contratoPropio = rowToken.contrato || null; // para "volver a mi contrato" tras ver subordinados
     ESTADO.nombreDisplay = rowToken.nombre_display || rowToken.contrato || 'Manager';
 
     document.getElementById('gate').classList.add('hidden');
@@ -323,7 +327,7 @@ async function intentarLogin(){
 function cerrarSesion(){
   ESTADO = { token:null, tipo:null, contrato:null, nombreDisplay:null,
     contratosTodos:[], paresSet:new Set(), equivMap:{}, seccionActiva:'pares',
-    contratoAbierto:null, periodoActual:null };
+    contratoAbierto:null, contratoPropio:null, subordinadosActuales:[], periodoActual:null };
   document.getElementById('app').classList.add('hidden');
   document.getElementById('gate').classList.remove('hidden');
   document.getElementById('tokenInput').value = '';
@@ -468,6 +472,12 @@ async function abrirContrato(codigo){
   document.getElementById('contractTitle').textContent = codigo;
   document.getElementById('btnVolver').style.display = (ESTADO.tipo === 'admin') ? 'inline-block' : 'none';
 
+  // Boton "volver a mi contrato" -- solo aplica a managers viendo un subordinado
+  const btnVolverPropio = document.getElementById('btnVolverPropio');
+  if(btnVolverPropio){
+    btnVolverPropio.style.display = (ESTADO.tipo !== 'admin' && ESTADO.contratoPropio && codigo !== ESTADO.contratoPropio) ? 'inline-block' : 'none';
+  }
+
   // Nombre del contrato: contratos_tokens cubre Nexus Y Vertex (a diferencia
   // de la tabla 'contratos', que parece ser solo Nexus)
   try{
@@ -481,12 +491,21 @@ async function abrirContrato(codigo){
     }
   }catch(e){ /* silencioso, se queda solo el codigo si falla */ }
 
+  // Subordinados: contratos que le reportan/transfieren a este (jerarquia_contratos)
+  try{
+    const { data: subs, error: errSubs } = await sb
+      .from('jerarquia_contratos')
+      .select('contrato, notas')
+      .eq('reporta_a', codigo);
+    ESTADO.subordinadosActuales = (!errSubs && subs) ? subs : [];
+  }catch(e){ ESTADO.subordinadosActuales = []; }
+
   const periodos = await obtenerPeriodosDeContrato(codigo);
   const select = document.getElementById('periodoSelect');
 
   if(periodos.length === 0){
     select.innerHTML = '<option>Sin periodos</option>';
-    document.getElementById('tablaWrap').innerHTML = '<p class="smallNote">Sin datos para este contrato.</p>';
+    document.getElementById('tablaWrap').innerHTML = renderSeccionEquipo() + '<p class="smallNote">Sin datos para este contrato.</p>';
     return;
   }
 
@@ -784,6 +803,31 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
         📊 Ver histórico multi-mes de este contrato
       </button>
       <div id="matrizMultiMesWrap" class="hidden" style="margin-top:14px;"></div>
+    </div>
+
+    ${renderSeccionEquipo()}
+  `;
+}
+
+// Tarjetas de contratos subordinados (jerarquia_contratos.reporta_a = este contrato)
+// -- permite a un manager ver tambien los contratos/jugadores de su equipo
+function renderSeccionEquipo(){
+  const subs = ESTADO.subordinadosActuales || [];
+  if(subs.length === 0) return '';
+
+  const tarjetas = subs.map(s => `
+    <div class="contractCard" onclick="abrirContrato('${s.contrato}')">
+      <div class="code">${s.contrato}</div>
+      <div class="name">${s.notas || 'Subordinado'}</div>
+    </div>
+  `).join('');
+
+  return `
+    <div style="margin-top:24px; border-top:1px solid var(--border); padding-top:18px;">
+      <div style="font-size:16px; font-weight:bold; color:var(--cyan); margin-bottom:10px;">
+        👥 Tu equipo — contratos que te reportan
+      </div>
+      <div class="contractGrid">${tarjetas}</div>
     </div>
   `;
 }
