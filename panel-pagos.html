@@ -673,10 +673,23 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
     </tr>
   `;}).join('');
 
-  const totalCoins = resumenContrato ? Number(resumenContrato.total_coins || 0) : null;
-  const totalPaypal = resumenContrato ? Number(resumenContrato.total_paypal || 0) : null;
+  const sueldoPropio = resumenContrato ? Number(resumenContrato.total_paypal || 0) : null;
+  const transferencias = resumenContrato ? Number(resumenContrato.transferencias_recibidas || 0) : null;
   const totalFinal = resumenContrato ? Number(resumenContrato.total_final || 0) : null;
+  const totalCoins = resumenContrato ? Number(resumenContrato.total_coins || 0) : null;
   const usuariosValidos = resumenContrato ? resumenContrato.usuarios_validos : null;
+  // Columna numerica de regalo pagado por manager (aun no existe en Vertex,
+  // se detecta sola si algun dia aparece -- no se inventa nombre fijo)
+  const candidatosRegaloManager = ['regalo_pagado_manager', 'regalo_manager', 'monto_regalo_manager'];
+  let regaloManager = null;
+  if(resumenContrato){
+    for(const c of candidatosRegaloManager){
+      if(resumenContrato[c] !== undefined && resumenContrato[c] !== null){
+        regaloManager = Number(resumenContrato[c]);
+        break;
+      }
+    }
+  }
 
   wrap.innerHTML = `
     ${marcable ? '' : '<div class="histBadge" style="margin-bottom:8px;">📜 Periodo histórico — solo lectura, no se puede marcar (regla: pagos válidos desde 2026)</div>'}
@@ -693,9 +706,25 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
         <div>${renderToggleSueldoContrato(sueldoPagado, confirmadoPorSueldo, fechaPagoSueldo, marcable)}</div>
       </div>
       ${resumenContrato ? `
+        <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:14px;">
+          <div style="display:flex; justify-content:space-between; max-width:420px; padding:3px 0;">
+            <span class="smallNote">Sueldo propio (%)</span><span>${fmtMoney(sueldoPropio)}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; max-width:420px; padding:3px 0;">
+            <span class="smallNote">+ Transferencias recibidas</span><span>${fmtMoney(transferencias)}</span>
+          </div>
+          ${regaloManager !== null ? `
+          <div style="display:flex; justify-content:space-between; max-width:420px; padding:3px 0;">
+            <span class="smallNote">− Regalo pagado por el manager</span><span style="color:var(--pink);">−${fmtMoney(Math.abs(regaloManager))}</span>
+          </div>` : (resumenContrato.observaciones && /regalo/i.test(resumenContrato.observaciones) ? `
+          <div class="smallNote" style="margin-top:4px; font-style:italic;">📝 ${resumenContrato.observaciones}</div>
+          ` : '')}
+          <div style="display:flex; justify-content:space-between; max-width:420px; padding:3px 0; border-top:1px solid var(--border); margin-top:4px; font-weight:bold;">
+            <span>= Total final</span><span style="color:var(--cyan);">${fmtMoney(totalFinal)}</span>
+          </div>
+        </div>
         <div style="display:flex; gap:24px; margin-top:12px; flex-wrap:wrap; font-size:14px; color:var(--gray);">
           <div>🎁 Total Coins: <b style="color:var(--white);">${totalCoins.toLocaleString('es-MX')}</b></div>
-          <div>💵 Total PayPal: <b style="color:var(--white);">${fmtMoney(totalPaypal)}</b></div>
           <div>👥 Usuarios que cumplen: <b style="color:var(--white);">${usuariosValidos ?? '—'}</b></div>
         </div>
       ` : ''}
