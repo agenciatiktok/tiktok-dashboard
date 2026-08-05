@@ -470,20 +470,31 @@ async function abrirContrato(codigo){
   await cargarPeriodo(periodos[0]);
 }
 
+// Vertex sube varias veces al mes -- nos quedamos solo con el ULTIMO corte
+// de cada mes calendario, no con cada subida intermedia
+function agruparPorMesUltimoCorte(periodosArray){
+  const porMes = {};
+  periodosArray.forEach(p => {
+    const mesKey = String(p).slice(0, 7); // YYYY-MM
+    if(!porMes[mesKey] || p > porMes[mesKey]) porMes[mesKey] = p;
+  });
+  return Object.values(porMes).sort().reverse();
+}
+
 async function obtenerPeriodosDeContrato(codigo){
   try{
-    const { data, error } = await sb
-      .from('usuarios_tiktok')
-      .select('fecha_periodo, fecha_datos, periodo_archivo')
-      .eq('contrato', codigo);
-    if(error) throw error;
+    const data = await fetchAllPaged(
+      'usuarios_tiktok',
+      'fecha_periodo, fecha_datos, periodo_archivo',
+      q => q.eq('contrato', codigo)
+    );
 
     const set = new Set();
     (data||[]).forEach(r => {
       const k = periodoKeyDe(r);
       if(k) set.add(k);
     });
-    return Array.from(set).sort().reverse(); // más reciente primero
+    return agruparPorMesUltimoCorte(Array.from(set)); // más reciente primero, 1 por mes
   }catch(e){
     mostrarErrorGlobal('No pude leer periodos de ' + codigo + ': ' + e.message);
     return [];
@@ -764,9 +775,9 @@ async function toggleMatrizMultiMes(contrato){
     // resolver usuarios en blanco tambien aqui
     const fallback = await resolverUsuariosFaltantes(rows);
 
-    // periodos distintos, mas recientes primero, tope de 6 meses para no saturar
-    const periodosSet = new Set(rows.map(r => periodoKeyDe(r)).filter(Boolean));
-    const periodos = Array.from(periodosSet).sort().reverse().slice(0, 6);
+    // periodos distintos, agrupados por mes (1 corte final por mes), tope 6 meses
+    const periodosSetRaw = new Set(rows.map(r => periodoKeyDe(r)).filter(Boolean));
+    const periodos = agruparPorMesUltimoCorte(Array.from(periodosSetRaw)).slice(0, 6);
     const periodosAsc = [...periodos].reverse(); // mostrar cronologico izq->der
 
     // pivot: id_tiktok -> { usuario, [periodo]: {dias,horas,cumple} }
