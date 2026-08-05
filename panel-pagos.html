@@ -631,23 +631,16 @@ async function resolverUsuariosFaltantes(rows){
   }
 }
 
-function renderIncentivoTexto(row, repRow){
-  // B-series: siempre viene directo en la fila de usuarios_tiktok
-  if(esSerieB(row.contrato)){
-    const coinsB = Number(row.coins_incentivo || 0);
-    const paypalB = Number(row.paypal_incentivo || 0);
-    if(coinsB > 0) return `${coinsB.toLocaleString('es-MX')} coins`;
-    if(paypalB > 0) return fmtMoney(paypalB);
-    return '—';
-  }
-  // A-series: el dato real vive en reportes_contratos (repRow), usuarios_tiktok
-  // siempre queda en 0 para Nexus
-  const fuente = repRow || row;
+function renderCoinsTexto(row, repRow){
+  const fuente = esSerieB(row.contrato) ? row : (repRow || row);
   const coins = Number(fuente.coins_incentivo || 0);
+  return coins > 0 ? coins.toLocaleString('es-MX') : '—';
+}
+
+function renderPaypalTexto(row, repRow){
+  const fuente = esSerieB(row.contrato) ? row : (repRow || row);
   const paypal = Number(fuente.paypal_incentivo || 0);
-  if(coins > 0) return `${coins.toLocaleString('es-MX')} coins`;
-  if(paypal > 0) return fmtMoney(paypal);
-  return '—';
+  return paypal > 0 ? fmtMoney(paypal) : '—';
 }
 
 function renderCumpleTexto(cumple){
@@ -692,7 +685,8 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
       <td>${r.horas ?? '—'}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
       <td>${renderCumpleTexto(r.cumple)}</td>
-      <td>${renderIncentivoTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
+      <td>${renderCoinsTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
+      <td>${renderPaypalTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
       <td>${renderToggleRegalo(r, marcable)}</td>
     </tr>
   `;}).join('');
@@ -758,7 +752,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
       <thead>
         <tr>
           <th>Usuario</th><th>ID</th><th>Días</th><th>Horas</th><th>Diamantes</th>
-          <th>Cumple</th><th>Incentivo</th><th>Regalo pagado</th>
+          <th>Cumple</th><th>Coins</th><th>Paypal</th><th>Regalo pagado</th>
         </tr>
       </thead>
       <tbody>${filas}</tbody>
@@ -1079,7 +1073,8 @@ async function abrirHistorial(idTiktok){
           <td>${r.dias ?? '—'}</td>
           <td>${r.horas ?? '—'}</td>
           <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-          <td>${renderIncentivoTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
+          <td>${renderCoinsTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
+          <td>${renderPaypalTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
           <td>${r.regalo_pagado ? '✅ '+(r.confirmado_por_regalo||'') : (esPeriodoMarcable(periodoKeyDe(r)) ? '⬜' : '🔒')}</td>
         </tr>
       `).join('');
@@ -1092,7 +1087,7 @@ async function abrirHistorial(idTiktok){
           <table>
             <thead><tr>
               <th>Periodo</th><th>Contrato</th><th>Usuario</th><th>Días</th><th>Horas</th>
-              <th>Diamantes</th><th>Incentivo</th><th>Regalo pag.</th>
+              <th>Diamantes</th><th>Coins</th><th>Paypal</th><th>Regalo pag.</th>
             </tr></thead>
             <tbody>${filas}</tbody>
           </table>
