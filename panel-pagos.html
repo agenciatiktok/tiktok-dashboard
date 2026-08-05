@@ -539,26 +539,14 @@ async function cargarPeriodo(periodo){
       }
     }catch(e){ /* silencioso: resumen_contratos puede no existir para B-series */ }
 
-    // 3) Incentivo por jugador (A-series) — reportes_contratos, columnas detectadas en vivo
-    let incentivoPorUsuario = {};
-    if(!esSerieB(ESTADO.contratoAbierto)){
-      try{
-        const { data: rep, error: errRep } = await sb
-          .from('reportes_contratos')
-          .select('*')
-          .eq('contrato', ESTADO.contratoAbierto)
-          .eq('periodo', periodo);
-        if(!errRep && rep){
-          rep.forEach(r => { incentivoPorUsuario[r.usuario_id] = r; });
-        }
-      }catch(e){ /* silencioso */ }
-    }
+    // 3) Incentivo por jugador: ya viene directo en usuarios_tiktok
+    //    (coins_incentivo / paypal_incentivo), no hace falta reportes_contratos
 
     // 4) Resolver usuarios en blanco: si 'usuario' viene vacio, buscar el ultimo
     //    nombre conocido de ese id_tiktok en cualquier otro periodo
     const fallbackUsuarios = await resolverUsuariosFaltantes(data || []);
 
-    renderTablaUsuarios(data || [], periodo, resumenContrato, incentivoPorUsuario, fallbackUsuarios);
+    renderTablaUsuarios(data || [], periodo, resumenContrato, fallbackUsuarios);
   }catch(e){
     wrap.innerHTML = `<div class="errBox">⚠️ Error cargando el periodo: ${e.message}</div>`;
   }
@@ -592,39 +580,20 @@ async function resolverUsuariosFaltantes(rows){
   }
 }
 
-// Detecta el nombre real de columna de incentivo en una fila de reportes_contratos
-// (no asumimos nombre fijo — probamos candidatos y usamos el primero que exista)
-function extraerIncentivo(repRow){
-  if(!repRow) return { tipo:null, monto:0 };
-  const candCoins  = ['incentivo_coins','coins_incentivo','total_coins'];
-  const candPaypal = ['incentivo_paypal','paypal_incentivo','total_paypal'];
-
-  for(const c of candCoins){
-    if(repRow[c] !== undefined && repRow[c] !== null && Number(repRow[c]) > 0){
-      return { tipo:'coins', monto:Number(repRow[c]) };
-    }
-  }
-  for(const c of candPaypal){
-    if(repRow[c] !== undefined && repRow[c] !== null && Number(repRow[c]) > 0){
-      return { tipo:'paypal', monto:Number(repRow[c]) };
-    }
-  }
-  return { tipo:null, monto:0 };
-}
-
-function renderIncentivoTexto(row, repRow){
-  if(esSerieB(row.contrato)){
-    // B-series: paypal_bruto en usuarios_tiktok YA ES el regalo del jugador
-    const v = Number(row.paypal_bruto || 0);
-    return v > 0 ? fmtMoney(v) : '—';
-  }
-  const inc = extraerIncentivo(repRow);
-  if(inc.tipo === 'coins') return `${inc.monto.toLocaleString('es-MX')} coins`;
-  if(inc.tipo === 'paypal') return fmtMoney(inc.monto);
+function renderIncentivoTexto(row){
+  const coins = Number(row.coins_incentivo || 0);
+  const paypal = Number(row.paypal_incentivo || 0);
+  if(coins > 0) return `${coins.toLocaleString('es-MX')} coins`;
+  if(paypal > 0) return fmtMoney(paypal);
   return '—';
 }
 
-function renderTablaUsuarios(rows, periodo, resumenContrato, incentivoPorUsuario, fallbackUsuarios){
+function renderCumpleTexto(cumple){
+  if(cumple === null || cumple === undefined) return '—';
+  return cumple ? 'Sí' : 'No';
+}
+
+function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
   const wrap = document.getElementById('tablaWrap');
   if(rows.length === 0){
     wrap.innerHTML = '<p class="smallNote">Sin jugadores en este periodo.</p>';
@@ -648,7 +617,6 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, incentivoPorUsuario
   const fechaPagoSueldo = rows[0] ? rows[0].fecha_pago_sueldo : null;
 
   const filas = rowsOrdenadas.map(r => {
-    const repRow = incentivoPorUsuario[r.id_tiktok] || incentivoPorUsuario[r.id] || null;
     const nombreMostrar = r.usuario || fallbackUsuarios[r.id_tiktok];
     const esFallback = !r.usuario && !!fallbackUsuarios[r.id_tiktok];
     return `
@@ -660,8 +628,8 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, incentivoPorUsuario
       <td>${r.dias ?? '—'}</td>
       <td>${r.horas ?? '—'}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-      <td>${r.cumple || '—'}</td>
-      <td>${renderIncentivoTexto(r, repRow)}</td>
+      <td>${renderCumpleTexto(r.cumple)}</td>
+      <td>${renderIncentivoTexto(r)}</td>
       <td>${renderToggleRegalo(r, marcable)}</td>
     </tr>
   `;}).join('');
