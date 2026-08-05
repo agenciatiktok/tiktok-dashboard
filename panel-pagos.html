@@ -835,7 +835,9 @@ async function toggleMatrizMultiMes(contrato){
     // periodos distintos, agrupados por mes (1 corte final por mes), tope 6 meses
     const periodosSetRaw = new Set(rows.map(r => periodoKeyDe(r)).filter(Boolean));
     const periodos = agruparPorMesUltimoCorte(Array.from(periodosSetRaw)).slice(0, 6);
-    const periodosAsc = [...periodos].reverse(); // mostrar cronologico izq->der
+    // Orden de columnas tipo Excel original: mes actual primero, luego los
+    // anteriores en orden ascendente (no todo cronologico de corrido)
+    const periodosAsc = periodos.length ? [periodos[0], ...periodos.slice(1).reverse()] : [];
 
     // pivot: id_tiktok -> { usuario, [periodo]: {dias,horas,cumple} }
     const pivot = {};
@@ -876,7 +878,7 @@ async function toggleMatrizMultiMes(contrato){
     }).join('');
 
     const html = `
-      <p class="smallNote">Últimos ${periodos.length} periodos disponibles, más reciente primero en el orden de la fila, columnas en orden cronológico.</p>
+      <p class="smallNote">Últimos ${periodos.length} periodos disponibles — primera columna es el mes en curso, el resto en orden cronológico ascendente (igual que el Excel).</p>
       <div style="overflow-x:auto;">
         <table>
           <thead><tr><th>Usuario</th><th>ID</th>${headerCols}</tr></thead>
