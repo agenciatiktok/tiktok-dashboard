@@ -385,31 +385,21 @@ async function cargarContratosYEquivalencias(){
     ESTADO.contratosTodos = [];
   }
 
-  // 2) contratos_equivalencias: introspección de columnas (no asumimos nombres)
+  // 2) contratos_equivalencias: nombres de columna CONFIRMADOS (index.html linea 320)
+  //    nexus_codigo / vertex_codigo -- ya no se adivinan por introspeccion
   try{
-    const { data, error } = await sb.from('contratos_equivalencias').select('*');
+    const { data, error } = await sb.from('contratos_equivalencias').select('nexus_codigo,vertex_codigo');
     if(error) throw error;
 
-    if(data && data.length){
-      const sample = data[0];
-      // columnas cuyo valor de muestra parece codigo de contrato (A123 / B123)
-      const codeCols = Object.keys(sample).filter(k =>
-        /^[AB]\d{2,4}$/i.test(String(sample[k]||''))
-      );
-      if(codeCols.length >= 2){
-        data.forEach(row => {
-          const a = row[codeCols[0]];
-          const b = row[codeCols[1]];
-          if(a && b){
-            ESTADO.paresSet.add(a); ESTADO.paresSet.add(b);
-            ESTADO.equivMap[a] = b;
-            ESTADO.equivMap[b] = a;
-          }
-        });
-      } else {
-        mostrarErrorGlobal('contratos_equivalencias respondió pero no pude identificar cuáles columnas traen los códigos A0XX/B0XX. Revisa el nombre de las columnas y avísame.');
+    (data || []).forEach(row => {
+      const a = row.nexus_codigo;
+      const b = row.vertex_codigo;
+      if(a && b){
+        ESTADO.paresSet.add(a); ESTADO.paresSet.add(b);
+        ESTADO.equivMap[a] = b;
+        ESTADO.equivMap[b] = a;
       }
-    }
+    });
   }catch(e){
     mostrarErrorGlobal('No pude leer contratos_equivalencias: ' + e.message + ' (las secciones Pares no van a funcionar hasta resolver esto)');
   }
@@ -589,7 +579,7 @@ async function cargarPeriodo(periodo){
           'reportes_contratos', '*',
           q => q.eq('contrato', ESTADO.contratoAbierto).eq('periodo', periodo)
         );
-        (rep||[]).forEach(r => { incentivoPorUsuario[r.usuario_id] = r; });
+        (rep||[]).forEach(r => { incentivoPorUsuario[r.usuario] = r; });
       }catch(e){ /* silencioso */ }
     }
 
@@ -643,9 +633,24 @@ function renderPaypalTexto(row, repRow){
   return paypal > 0 ? fmtMoney(paypal) : '—';
 }
 
-function renderCumpleTexto(cumple){
-  if(cumple === null || cumple === undefined) return '—';
-  return cumple ? 'Sí' : 'No';
+// Replica EXACTA de calcularCumpleReal() en index.html v1.5.8 -- para que el
+// panel nunca diga Si/No distinto de lo que el jugador ve en mi-progreso.html.
+// B-series: confia en el 'cumple' que sube Vertex (umbral propio por contrato).
+// A002/A006/A014: regla fija 7d/15h. Resto de A-series: cumple = tiene incentivo real.
+function calcularCumpleReal(row, repRow){
+  if(esSerieB(row.contrato)){
+    return row.cumple === true || row.cumple === 'true' || row.cumple === 'SI';
+  }
+  const fuente = repRow || row;
+  const tieneRegalo = Number(fuente.paypal_incentivo || 0) > 0 || Number(fuente.coins_incentivo || 0) > 0;
+  if(row.contrato === 'A002' || row.contrato === 'A006' || row.contrato === 'A014'){
+    return (row.dias || 0) >= 7 && (row.horas || 0) >= 15;
+  }
+  return tieneRegalo;
+}
+
+function renderCumpleTexto(cumpleBool){
+  return cumpleBool ? 'Sí' : 'No';
 }
 
 // Prefiere el campo 'duracion' ya formateado (ej. "13h 44min 2s") que trae el
@@ -700,9 +705,9 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
       <td>${r.dias ?? '—'}</td>
       <td>${formatDuracionTexto(r)}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-      <td>${renderCumpleTexto(r.cumple)}</td>
-      <td>${renderCoinsTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
-      <td>${renderPaypalTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
+      <td>${renderCumpleTexto(calcularCumpleReal(r, incentivoPorUsuario[r.usuario]))}</td>
+      <td>${renderCoinsTexto(r, incentivoPorUsuario[r.usuario])}</td>
+      <td>${renderPaypalTexto(r, incentivoPorUsuario[r.usuario])}</td>
       <td>${renderToggleRegalo(r, marcable)}</td>
     </tr>
   `;}).join('');
@@ -855,14 +860,28 @@ async function toggleMatrizMultiMes(contrato){
     // anteriores en orden ascendente (no todo cronologico de corrido)
     const periodosAsc = periodos.length ? [periodos[0], ...periodos.slice(1).reverse()] : [];
 
-    // pivot: id_tiktok -> { usuario, agencia, [periodo]: {dias,horas,duracion,cumple} }
+    // Incentivo real (A-series) para poder calcular Cumple igual que index.html --
+    // cruce por periodo+usuario, mismo criterio que el resto del panel
+    const incentivoPorPeriodoUsuario = {};
+    if(!esSerieB(contrato)){
+      try{
+        const rep = await fetchAllPaged(
+          'reportes_contratos', 'periodo,usuario,paypal_incentivo,coins_incentivo',
+          q => q.eq('contrato', contrato).in('periodo', periodos)
+        );
+        (rep||[]).forEach(r => { incentivoPorPeriodoUsuario[`${r.periodo}|${r.usuario}`] = r; });
+      }catch(e){ /* silencioso */ }
+    }
+
+    // pivot: id_tiktok -> { usuario, agencia, [periodo]: {dias,horas,duracion,cumpleReal} }
     const pivot = {};
     rows.forEach(r => {
       const k = periodoKeyDe(r);
       if(!periodos.includes(k)) return;
       const id = r.id_tiktok;
+      const repRow = incentivoPorPeriodoUsuario[`${k}|${r.usuario}`];
       if(!pivot[id]) pivot[id] = { usuario: r.usuario || fallback[id] || '(sin nombre)', agencia: r.agencia || '—', datos:{} };
-      pivot[id].datos[k] = { dias:r.dias, horas:r.horas, duracion:r.duracion, cumple:r.cumple };
+      pivot[id].datos[k] = { dias:r.dias, horas:r.horas, duracion:r.duracion, cumpleReal: calcularCumpleReal(r, repRow) };
       if(r.usuario) pivot[id].usuario = r.usuario; // preferir nombre real si aparece en cualquier mes
       if(r.agencia) pivot[id].agencia = r.agencia;
     });
@@ -887,8 +906,7 @@ async function toggleMatrizMultiMes(contrato){
       const celdas = periodosAsc.map(p => {
         const d = pivot[id].datos[p];
         if(!d) return `<td class="smallNote">—</td>`;
-        const cumple = String(d.cumple).toUpperCase() === 'SI' || d.cumple === true;
-        const color = cumple ? 'var(--green)' : 'var(--red)';
+        const color = d.cumpleReal ? 'var(--green)' : 'var(--red)';
         return `<td style="color:${color}; font-weight:bold;">${d.dias ?? 0}d / ${formatDuracionTexto(d)}</td>`;
       }).join('');
       return `<tr><td style="color:var(--cyan); font-weight:bold;">${nombre}</td><td class="smallNote">${pivot[id].agencia}</td>${celdas}</tr>`;
@@ -1048,10 +1066,21 @@ async function abrirHistorial(idTiktok){
       .eq('id_tiktok', idTiktok);
     if(error) throw error;
 
-    // Incentivo real de A-series vive en reportes_contratos (usuario_id = id_tiktok)
-    const repRows = await fetchAllPaged('reportes_contratos', '*', q => q.eq('usuario_id', idTiktok));
-    const incentivoPorPeriodo = {};
-    (repRows||[]).forEach(r => { incentivoPorPeriodo[r.periodo] = r; });
+    // Incentivo real de A-series vive en reportes_contratos. Cruce por
+    // periodo+usuario, IGUAL que mi-progreso.html (no por usuario_id) --
+    // el nombre puede variar por periodo, por eso la llave compuesta.
+    const contratosA = [...new Set((data||[]).map(r => r.contrato).filter(c => c && !esSerieB(c)))];
+    const periodosPresentes = (data||[]).map(r => periodoKeyDe(r)).filter(Boolean);
+    const incentivoPorPeriodo = {}; // clave: `${periodo}|${usuario}`
+    for(const c of contratosA){
+      try{
+        const rep = await fetchAllPaged(
+          'reportes_contratos', 'periodo,usuario,paypal_incentivo,coins_incentivo',
+          q => q.eq('contrato', c).in('periodo', periodosPresentes)
+        );
+        (rep||[]).forEach(r => { incentivoPorPeriodo[`${r.periodo}|${r.usuario}`] = r; });
+      }catch(e){ /* silencioso */ }
+    }
 
     // Agrupar por mes -- nos quedamos con el ULTIMO corte de cada mes calendario
     // (para el mes en curso, ese "ultimo corte" es simplemente la subida mas
@@ -1084,20 +1113,28 @@ async function abrirHistorial(idTiktok){
 
     const filas = filasOrdenadas
       // sin tope -- se muestra TODO el historial mensual disponible de este usuario
-      .map(r => `
+      .map((r, i) => {
+        // filasOrdenadas viene mas reciente primero -- el "mes anterior" cronologico
+        // de la fila i es la fila i+1 (mas vieja)
+        const anterior = filasOrdenadas[i + 1];
+        const huboCambio = anterior && anterior.usuario && r.usuario && anterior.usuario !== r.usuario;
+        return `
         <tr>
           <td>${fmtFecha(periodoKeyDe(r))}</td>
           <td>${r.contrato || '—'}</td>
           <td>${r.agencia || '—'}</td>
-          <td>${r.usuario || '—'}</td>
+          <td>
+            ${r.usuario || '—'}
+            ${huboCambio ? `<div class="smallNote" style="color:var(--pink);">🔄 antes: ${anterior.usuario}</div>` : ''}
+          </td>
           <td>${r.dias ?? '—'}</td>
           <td>${formatDuracionTexto(r)}</td>
           <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-          <td>${renderCoinsTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
-          <td>${renderPaypalTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
+          <td>${renderCoinsTexto(r, incentivoPorPeriodo[`${periodoKeyDe(r)}|${r.usuario}`])}</td>
+          <td>${renderPaypalTexto(r, incentivoPorPeriodo[`${periodoKeyDe(r)}|${r.usuario}`])}</td>
           <td>${r.regalo_pagado ? '✅ '+(r.confirmado_por_regalo||'') : (esPeriodoMarcable(periodoKeyDe(r)) ? '⬜' : '🔒')}</td>
         </tr>
-      `).join('');
+      `;}).join('');
 
     document.getElementById('modalOverlay').innerHTML = `
       <div class="modal">
