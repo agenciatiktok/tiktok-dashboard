@@ -578,14 +578,26 @@ async function cargarPeriodo(periodo){
       }
     }catch(e){ /* silencioso: resumen_contratos puede no existir para B-series */ }
 
-    // 3) Incentivo por jugador: ya viene directo en usuarios_tiktok
-    //    (coins_incentivo / paypal_incentivo), no hace falta reportes_contratos
+    // 3) Incentivo por jugador:
+    //    - B-series (Vertex): ya viene directo en usuarios_tiktok (coins_incentivo/paypal_incentivo)
+    //    - A-series (Nexus): se sube a reportes_contratos (confirmado en codigo real
+    //      de 12_notas_HIBRIDO_MEVAK.py linea 254), usuarios_tiktok siempre queda en 0 para Nexus
+    let incentivoPorUsuario = {};
+    if(!esSerieB(ESTADO.contratoAbierto)){
+      try{
+        const rep = await fetchAllPaged(
+          'reportes_contratos', '*',
+          q => q.eq('contrato', ESTADO.contratoAbierto).eq('periodo', periodo)
+        );
+        (rep||[]).forEach(r => { incentivoPorUsuario[r.usuario_id] = r; });
+      }catch(e){ /* silencioso */ }
+    }
 
     // 4) Resolver usuarios en blanco: si 'usuario' viene vacio, buscar el ultimo
     //    nombre conocido de ese id_tiktok en cualquier otro periodo
     const fallbackUsuarios = await resolverUsuariosFaltantes(data || []);
 
-    renderTablaUsuarios(data || [], periodo, resumenContrato, fallbackUsuarios);
+    renderTablaUsuarios(data || [], periodo, resumenContrato, fallbackUsuarios, incentivoPorUsuario);
   }catch(e){
     wrap.innerHTML = `<div class="errBox">⚠️ Error cargando el periodo: ${e.message}</div>`;
   }
@@ -619,9 +631,20 @@ async function resolverUsuariosFaltantes(rows){
   }
 }
 
-function renderIncentivoTexto(row){
-  const coins = Number(row.coins_incentivo || 0);
-  const paypal = Number(row.paypal_incentivo || 0);
+function renderIncentivoTexto(row, repRow){
+  // B-series: siempre viene directo en la fila de usuarios_tiktok
+  if(esSerieB(row.contrato)){
+    const coinsB = Number(row.coins_incentivo || 0);
+    const paypalB = Number(row.paypal_incentivo || 0);
+    if(coinsB > 0) return `${coinsB.toLocaleString('es-MX')} coins`;
+    if(paypalB > 0) return fmtMoney(paypalB);
+    return '—';
+  }
+  // A-series: el dato real vive en reportes_contratos (repRow), usuarios_tiktok
+  // siempre queda en 0 para Nexus
+  const fuente = repRow || row;
+  const coins = Number(fuente.coins_incentivo || 0);
+  const paypal = Number(fuente.paypal_incentivo || 0);
   if(coins > 0) return `${coins.toLocaleString('es-MX')} coins`;
   if(paypal > 0) return fmtMoney(paypal);
   return '—';
@@ -632,7 +655,7 @@ function renderCumpleTexto(cumple){
   return cumple ? 'Sí' : 'No';
 }
 
-function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
+function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, incentivoPorUsuario){
   const wrap = document.getElementById('tablaWrap');
   if(rows.length === 0){
     wrap.innerHTML = '<p class="smallNote">Sin jugadores en este periodo.</p>';
@@ -641,6 +664,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
 
   const marcable = esPeriodoMarcable(periodo);
   fallbackUsuarios = fallbackUsuarios || {};
+  incentivoPorUsuario = incentivoPorUsuario || {};
 
   // Orden: mayor dias, luego mayor horas
   const rowsOrdenadas = [...rows].sort((a,b) => {
@@ -668,7 +692,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
       <td>${r.horas ?? '—'}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
       <td>${renderCumpleTexto(r.cumple)}</td>
-      <td>${renderIncentivoTexto(r)}</td>
+      <td>${renderIncentivoTexto(r, incentivoPorUsuario[r.id_tiktok])}</td>
       <td>${renderToggleRegalo(r, marcable)}</td>
     </tr>
   `;}).join('');
@@ -1011,6 +1035,11 @@ async function abrirHistorial(idTiktok){
       .eq('id_tiktok', idTiktok);
     if(error) throw error;
 
+    // Incentivo real de A-series vive en reportes_contratos (usuario_id = id_tiktok)
+    const repRows = await fetchAllPaged('reportes_contratos', '*', q => q.eq('usuario_id', idTiktok));
+    const incentivoPorPeriodo = {};
+    (repRows||[]).forEach(r => { incentivoPorPeriodo[r.periodo] = r; });
+
     // Agrupar por mes -- nos quedamos con el ULTIMO corte de cada mes calendario
     // (para el mes en curso, ese "ultimo corte" es simplemente la subida mas
     // reciente disponible, ya que el mes no ha cerrado)
@@ -1050,7 +1079,7 @@ async function abrirHistorial(idTiktok){
           <td>${r.dias ?? '—'}</td>
           <td>${r.horas ?? '—'}</td>
           <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-          <td>${renderIncentivoTexto(r)}</td>
+          <td>${renderIncentivoTexto(r, incentivoPorPeriodo[periodoKeyDe(r)])}</td>
           <td>${r.regalo_pagado ? '✅ '+(r.confirmado_por_regalo||'') : (esPeriodoMarcable(periodoKeyDe(r)) ? '⬜' : '🔒')}</td>
         </tr>
       `).join('');
