@@ -1050,8 +1050,7 @@ async function abrirHistorial(idTiktok){
           <td>${r.dias ?? '—'}</td>
           <td>${r.horas ?? '—'}</td>
           <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
-          <td>${fmtMoney(r.paypal_bruto)}</td>
-          <td>${r.sueldo_pagado ? '✅ '+(r.confirmado_por_sueldo||'') : (esPeriodoMarcable(periodoKeyDe(r)) ? '⬜' : '🔒')}</td>
+          <td>${renderIncentivoTexto(r)}</td>
           <td>${r.regalo_pagado ? '✅ '+(r.confirmado_por_regalo||'') : (esPeriodoMarcable(periodoKeyDe(r)) ? '⬜' : '🔒')}</td>
         </tr>
       `).join('');
@@ -1064,7 +1063,7 @@ async function abrirHistorial(idTiktok){
           <table>
             <thead><tr>
               <th>Periodo</th><th>Contrato</th><th>Usuario</th><th>Días</th><th>Horas</th>
-              <th>Diamantes</th><th>Sueldo</th><th>Sueldo pag.</th><th>Regalo pag.</th>
+              <th>Diamantes</th><th>Incentivo</th><th>Regalo pag.</th>
             </tr></thead>
             <tbody>${filas}</tbody>
           </table>
