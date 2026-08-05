@@ -871,38 +871,44 @@ async function cargarResumenEquipo(){
   const todos = [codigoBase, ...equipo.map(s => s.contrato)];
 
   const filas = [];
-  let totalGeneral = 0;
+  let totalPaypalGeneral = 0;
+  let totalCoinsGeneral = 0;
   let faltanDatos = false;
 
   for(const c of todos){
-    let monto = null;
+    let montoPaypal = null;
+    let montoCoins = null;
     try{
       const periodos = await obtenerPeriodosDeContrato(c);
       if(periodos.length){
         const { data } = await sb
           .from('resumen_contratos')
-          .select('total_final')
+          .select('total_final, total_coins')
           .eq('contrato', c)
           .eq('periodo', periodos[0])
           .maybeSingle();
-        if(data && data.total_final !== null && data.total_final !== undefined){
-          monto = Number(data.total_final);
+        if(data){
+          if(data.total_final !== null && data.total_final !== undefined) montoPaypal = Number(data.total_final);
+          if(data.total_coins !== null && data.total_coins !== undefined) montoCoins = Number(data.total_coins);
         }
       }
     }catch(e){ /* silencioso */ }
 
-    if(monto !== null){
-      totalGeneral += monto;
-    } else {
-      faltanDatos = true;
-    }
-    filas.push({ contrato:c, monto });
+    if(montoPaypal !== null) totalPaypalGeneral += montoPaypal;
+    if(montoCoins !== null) totalCoinsGeneral += montoCoins;
+    if(montoPaypal === null && montoCoins === null) faltanDatos = true;
+
+    filas.push({ contrato:c, montoPaypal, montoCoins });
   }
 
   const filasHtml = filas.map(f => `
-    <div style="display:flex; justify-content:space-between; max-width:420px; padding:4px 0;">
+    <div style="display:flex; justify-content:space-between; max-width:480px; padding:4px 0;">
       <span>${f.contrato}${f.contrato === codigoBase ? ' (tú)' : ''}</span>
-      <span>${f.monto !== null ? fmtMoney(f.monto) : 'Sin dato'}</span>
+      <span>
+        ${f.montoPaypal !== null ? fmtMoney(f.montoPaypal) : '—'}
+        ${f.montoCoins !== null && f.montoCoins > 0 ? ` · ${f.montoCoins.toLocaleString('es-MX')} coins` : ''}
+        ${f.montoPaypal === null && (f.montoCoins === null || f.montoCoins === 0) ? 'Sin dato' : ''}
+      </span>
     </div>
   `).join('');
 
@@ -910,8 +916,14 @@ async function cargarResumenEquipo(){
     <div style="background:var(--panel); border:2px solid var(--cyan); border-radius:10px; padding:14px 18px; margin-top:14px;">
       <div class="smallNote">💰 SUMA TOTAL DEL EQUIPO — este periodo (tú + todos los que te reportan)</div>
       <div style="margin-top:8px;">${filasHtml}</div>
-      <div style="display:flex; justify-content:space-between; max-width:420px; padding:6px 0; border-top:1px solid var(--border); margin-top:6px; font-weight:bold; font-size:18px;">
-        <span>TOTAL</span><span style="color:var(--cyan);">${fmtMoney(totalGeneral)}</span>
+      <div style="max-width:480px; padding:6px 0; border-top:1px solid var(--border); margin-top:6px; font-weight:bold;">
+        <div style="display:flex; justify-content:space-between; font-size:18px;">
+          <span>TOTAL PayPal</span><span style="color:var(--cyan);">${fmtMoney(totalPaypalGeneral)}</span>
+        </div>
+        ${totalCoinsGeneral > 0 ? `
+        <div style="display:flex; justify-content:space-between; font-size:15px; margin-top:4px;">
+          <span>TOTAL Coins</span><span style="color:var(--cyan);">${totalCoinsGeneral.toLocaleString('es-MX')}</span>
+        </div>` : ''}
       </div>
       ${faltanDatos ? '<div class="smallNote" style="color:var(--pink); margin-top:6px;">⚠️ Algún(os) contrato(s) no tienen dato confirmado en resumen_contratos — no se sumaron, el total puede estar incompleto.</div>' : ''}
     </div>
