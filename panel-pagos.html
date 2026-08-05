@@ -492,12 +492,31 @@ async function abrirContrato(codigo){
   }catch(e){ /* silencioso, se queda solo el codigo si falla */ }
 
   // Subordinados: contratos que le reportan/transfieren a este (jerarquia_contratos)
+  // Y TAMBIEN al equivalente Nexus<->Vertex del mismo manager (ej. A002=B003
+  // son la misma Hayaris en los dos sistemas -- su equipo incluye ambos lados)
+  let equivalenteDe = null;
   try{
+    const { data: eq } = await sb
+      .from('contratos_equivalencias')
+      .select('nexus_codigo,vertex_codigo')
+      .or(`nexus_codigo.eq.${codigo},vertex_codigo.eq.${codigo}`)
+      .maybeSingle();
+    if(eq){
+      equivalenteDe = eq.nexus_codigo === codigo ? eq.vertex_codigo : eq.nexus_codigo;
+    }
+  }catch(e){ /* silencioso */ }
+
+  try{
+    const codigosABuscar = equivalenteDe ? [codigo, equivalenteDe] : [codigo];
     const { data: subs, error: errSubs } = await sb
       .from('jerarquia_contratos')
       .select('contrato, notas')
-      .eq('reporta_a', codigo);
+      .in('reporta_a', codigosABuscar);
     ESTADO.subordinadosActuales = (!errSubs && subs) ? subs : [];
+    // Agregar el equivalente mismo como tarjeta (mismo manager, otro sistema)
+    if(equivalenteDe){
+      ESTADO.subordinadosActuales.unshift({ contrato: equivalenteDe, notas: 'Mismo manager — equivalente en el otro sistema' });
+    }
   }catch(e){ ESTADO.subordinadosActuales = []; }
 
   const periodos = await obtenerPeriodosDeContrato(codigo);
