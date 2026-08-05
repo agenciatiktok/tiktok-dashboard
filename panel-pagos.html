@@ -348,15 +348,37 @@ async function iniciarApp(){
 }
 
 async function cargarContratosYEquivalencias(){
-  // 1) Contratos reales: distinct 'contrato' desde usuarios_tiktok (fuente de verdad,
-  //    no dependemos de que la tabla 'contratos' tenga las filas B-series)
-  //    PAGINADO: Supabase corta en 1000 filas por default, si no paginamos
-  //    los contratos que aparecen despues de la fila 1000 nunca se ven (esto
-  //    era el bug de "Solo Vertex" vacio).
+  // 1) Contratos reales: distinct 'contrato' desde usuarios_tiktok, PERO solo
+  //    los que tienen actividad RECIENTE (ultimos 35 dias desde la fecha mas
+  //    nueva que exista en toda la tabla). Esto oculta automaticamente:
+  //    - contratos ya desactivados (sin datos nuevos)
+  //    - jugadores que se movieron de contrato (el contrato viejo ya no
+  //      tiene actividad reciente, aunque tenga historial antiguo)
+  const VENTANA_DIAS_ACTIVO = 35;
   try{
-    const data = await fetchAllPaged('usuarios_tiktok', 'contrato', q => q.not('contrato', 'is', null));
-    const set = new Set((data||[]).map(r => r.contrato).filter(Boolean));
-    ESTADO.contratosTodos = Array.from(set).sort();
+    const data = await fetchAllPaged(
+      'usuarios_tiktok',
+      'contrato, fecha_periodo, fecha_datos, periodo_archivo',
+      q => q.not('contrato', 'is', null)
+    );
+
+    const maxPorContrato = {};
+    let maxGlobal = '';
+    (data||[]).forEach(r => {
+      const k = periodoKeyDe(r);
+      if(!k || !r.contrato) return;
+      if(k > maxGlobal) maxGlobal = k;
+      if(!maxPorContrato[r.contrato] || k > maxPorContrato[r.contrato]){
+        maxPorContrato[r.contrato] = k;
+      }
+    });
+
+    const fechaLimite = new Date(maxGlobal);
+    fechaLimite.setDate(fechaLimite.getDate() - VENTANA_DIAS_ACTIVO);
+    const limiteStr = fechaLimite.toISOString().slice(0,10);
+
+    const activos = Object.keys(maxPorContrato).filter(c => maxPorContrato[c] >= limiteStr);
+    ESTADO.contratosTodos = activos.sort();
   }catch(e){
     mostrarErrorGlobal('No pude leer contratos desde usuarios_tiktok: ' + e.message);
     ESTADO.contratosTodos = [];
