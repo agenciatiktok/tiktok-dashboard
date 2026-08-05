@@ -677,17 +677,6 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
   const totalFinal = resumenContrato ? Number(resumenContrato.total_final || 0) : null;
   const usuariosValidos = resumenContrato ? resumenContrato.usuarios_validos : null;
 
-  // Fallback cuando resumen_contratos no tiene fila (ej. Vertex nunca escribe ahi):
-  // sumamos los incentivos visibles de la tabla como estimado, dejando claro
-  // que NO es un total oficial confirmado
-  let estimadoCoins = 0, estimadoPaypal = 0;
-  if(!resumenContrato){
-    rowsOrdenadas.forEach(r => {
-      estimadoCoins += Number(r.coins_incentivo || 0);
-      estimadoPaypal += Number(r.paypal_incentivo || 0);
-    });
-  }
-
   wrap.innerHTML = `
     ${marcable ? '' : '<div class="histBadge" style="margin-bottom:8px;">📜 Periodo histórico — solo lectura, no se puede marcar (regla: pagos válidos desde 2026)</div>'}
 
@@ -696,9 +685,9 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
         <div>
           <div class="smallNote">💰 SUELDO DEL CONTRATO (manager) — este periodo</div>
           <div style="font-size:22px; font-weight:bold; color:var(--cyan);">
-            ${totalFinal !== null ? fmtMoney(totalFinal) : (estimadoPaypal > 0 || estimadoCoins > 0 ? fmtMoney(estimadoPaypal) : 'Sin dato')}
+            ${totalFinal !== null ? fmtMoney(totalFinal) : 'Sin dato'}
           </div>
-          ${(!resumenContrato) ? '<div class="smallNote" style="color:var(--pink);">⚠️ Estimado (suma de incentivos visibles) — resumen_contratos no tiene fila para este contrato/periodo, no es un total oficial confirmado</div>' : ''}
+          ${(!resumenContrato) ? '<div class="smallNote" style="color:var(--pink);">⚠️ Vertex no sube el sueldo del manager a Supabase todavía (confirmado con ellos) — no hay número confiable que mostrar aquí para este contrato</div>' : ''}
         </div>
         <div>${renderToggleSueldoContrato(sueldoPagado, confirmadoPorSueldo, fechaPagoSueldo, marcable)}</div>
       </div>
@@ -708,12 +697,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios){
           <div>💵 Total PayPal: <b style="color:var(--white);">${fmtMoney(totalPaypal)}</b></div>
           <div>👥 Usuarios que cumplen: <b style="color:var(--white);">${usuariosValidos ?? '—'}</b></div>
         </div>
-      ` : (estimadoPaypal > 0 || estimadoCoins > 0 ? `
-        <div style="display:flex; gap:24px; margin-top:12px; flex-wrap:wrap; font-size:14px; color:var(--gray);">
-          <div>🎁 Coins (suma visible): <b style="color:var(--white);">${estimadoCoins.toLocaleString('es-MX')}</b></div>
-          <div>💵 PayPal (suma visible): <b style="color:var(--white);">${fmtMoney(estimadoPaypal)}</b></div>
-        </div>
-      ` : '')}
+      ` : ''}
     </div>
 
     <table>
