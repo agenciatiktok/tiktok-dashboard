@@ -1081,7 +1081,7 @@ async function abrirHistorial(idTiktok){
     }
 
     const filas = filasOrdenadas
-      .slice(0, 6) // ultimos 6 cierres de mes (no 6 subidas sueltas)
+      // sin tope -- se muestra TODO el historial mensual disponible de este usuario
       .map(r => `
         <tr>
           <td>${fmtFecha(periodoKeyDe(r))}</td>
