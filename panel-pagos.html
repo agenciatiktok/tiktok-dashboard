@@ -696,6 +696,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
       <td onclick="abrirHistorial('${r.id_tiktok}')" style="color:var(--cyan); cursor:pointer; font-weight:bold;">
         ${nombreMostrar || '(sin nombre)'}${esFallback ? ' <span class="smallNote" title="Nombre tomado de otro periodo, este periodo vino en blanco">(hist.)</span>' : ''}
       </td>
+      <td>${r.agencia || '—'}</td>
       <td>${r.dias ?? '—'}</td>
       <td>${formatDuracionTexto(r)}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
@@ -766,7 +767,7 @@ function renderTablaUsuarios(rows, periodo, resumenContrato, fallbackUsuarios, i
     <table>
       <thead>
         <tr>
-          <th>Usuario</th><th>Días</th><th>Horas</th><th>Diamantes</th>
+          <th>Usuario</th><th>Agencia</th><th>Días</th><th>Horas</th><th>Diamantes</th>
           <th>Cumple</th><th>Coins</th><th>Paypal</th><th>Regalo pagado</th>
         </tr>
       </thead>
@@ -854,15 +855,16 @@ async function toggleMatrizMultiMes(contrato){
     // anteriores en orden ascendente (no todo cronologico de corrido)
     const periodosAsc = periodos.length ? [periodos[0], ...periodos.slice(1).reverse()] : [];
 
-    // pivot: id_tiktok -> { usuario, [periodo]: {dias,horas,duracion,cumple} }
+    // pivot: id_tiktok -> { usuario, agencia, [periodo]: {dias,horas,duracion,cumple} }
     const pivot = {};
     rows.forEach(r => {
       const k = periodoKeyDe(r);
       if(!periodos.includes(k)) return;
       const id = r.id_tiktok;
-      if(!pivot[id]) pivot[id] = { usuario: r.usuario || fallback[id] || '(sin nombre)', datos:{} };
+      if(!pivot[id]) pivot[id] = { usuario: r.usuario || fallback[id] || '(sin nombre)', agencia: r.agencia || '—', datos:{} };
       pivot[id].datos[k] = { dias:r.dias, horas:r.horas, duracion:r.duracion, cumple:r.cumple };
       if(r.usuario) pivot[id].usuario = r.usuario; // preferir nombre real si aparece en cualquier mes
+      if(r.agencia) pivot[id].agencia = r.agencia;
     });
 
     // ordenar por dias/horas del periodo mas reciente, Y excluir jugadores
@@ -889,14 +891,14 @@ async function toggleMatrizMultiMes(contrato){
         const color = cumple ? 'var(--green)' : 'var(--red)';
         return `<td style="color:${color}; font-weight:bold;">${d.dias ?? 0}d / ${formatDuracionTexto(d)}</td>`;
       }).join('');
-      return `<tr><td style="color:var(--cyan); font-weight:bold;">${nombre}</td>${celdas}</tr>`;
+      return `<tr><td style="color:var(--cyan); font-weight:bold;">${nombre}</td><td class="smallNote">${pivot[id].agencia}</td>${celdas}</tr>`;
     }).join('');
 
     const html = `
       <p class="smallNote">Últimos ${periodos.length} periodos disponibles — primera columna es el mes en curso, el resto en orden cronológico ascendente (igual que el Excel).</p>
       <div style="overflow-x:auto;">
         <table>
-          <thead><tr><th>Usuario</th>${headerCols}</tr></thead>
+          <thead><tr><th>Usuario</th><th>Agencia</th>${headerCols}</tr></thead>
           <tbody>${filas}</tbody>
         </table>
       </div>
@@ -1086,6 +1088,7 @@ async function abrirHistorial(idTiktok){
         <tr>
           <td>${fmtFecha(periodoKeyDe(r))}</td>
           <td>${r.contrato || '—'}</td>
+          <td>${r.agencia || '—'}</td>
           <td>${r.usuario || '—'}</td>
           <td>${r.dias ?? '—'}</td>
           <td>${formatDuracionTexto(r)}</td>
@@ -1103,7 +1106,7 @@ async function abrirHistorial(idTiktok){
         ${filas ? `
           <table>
             <thead><tr>
-              <th>Periodo</th><th>Contrato</th><th>Usuario</th><th>Días</th><th>Horas</th>
+              <th>Periodo</th><th>Contrato</th><th>Agencia</th><th>Usuario</th><th>Días</th><th>Horas</th>
               <th>Diamantes</th><th>Coins</th><th>Paypal</th><th>Regalo pag.</th>
             </tr></thead>
             <tbody>${filas}</tbody>
