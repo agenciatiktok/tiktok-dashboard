@@ -376,6 +376,7 @@ async function cargarContratosYEquivalencias(){
     const fechaLimite = new Date(maxGlobal);
     fechaLimite.setDate(fechaLimite.getDate() - VENTANA_DIAS_ACTIVO);
     const limiteStr = fechaLimite.toISOString().slice(0,10);
+    ESTADO.fechaCorteBajas = limiteStr; // usado tambien para ocultar jugadores de baja
 
     const activos = Object.keys(maxPorContrato).filter(c => maxPorContrato[c] >= limiteStr);
     ESTADO.contratosTodos = activos.sort();
@@ -800,15 +801,18 @@ async function toggleMatrizMultiMes(contrato){
       if(r.usuario) pivot[id].usuario = r.usuario; // preferir nombre real si aparece en cualquier mes
     });
 
-    // ordenar por dias/horas del periodo mas reciente
-    const idsOrdenados = Object.keys(pivot).sort((a,b) => {
-      const da = pivot[a].datos[periodos[0]]?.dias ?? -1;
-      const db = pivot[b].datos[periodos[0]]?.dias ?? -1;
-      if(db !== da) return db - da;
-      const ha = pivot[a].datos[periodos[0]]?.horas ?? -1;
-      const hb = pivot[b].datos[periodos[0]]?.horas ?? -1;
-      return hb - ha;
-    });
+    // ordenar por dias/horas del periodo mas reciente, Y excluir jugadores
+    // dados de baja (sin fila en el periodo mas reciente de este contrato)
+    const idsOrdenados = Object.keys(pivot)
+      .filter(id => pivot[id].datos[periodos[0]] !== undefined)
+      .sort((a,b) => {
+        const da = pivot[a].datos[periodos[0]]?.dias ?? -1;
+        const db = pivot[b].datos[periodos[0]]?.dias ?? -1;
+        if(db !== da) return db - da;
+        const ha = pivot[a].datos[periodos[0]]?.horas ?? -1;
+        const hb = pivot[b].datos[periodos[0]]?.horas ?? -1;
+        return hb - ha;
+      });
 
     const headerCols = periodosAsc.map(p => `<th>${fmtFecha(p)}</th>`).join('');
 
@@ -978,8 +982,23 @@ async function abrirHistorial(idTiktok){
       .eq('id_tiktok', idTiktok);
     if(error) throw error;
 
-    const filas = (data||[])
-      .sort((a,b) => (periodoKeyDe(b)||'').localeCompare(periodoKeyDe(a)||''))
+    const filasOrdenadas = (data||[]).sort((a,b) => (periodoKeyDe(b)||'').localeCompare(periodoKeyDe(a)||''));
+
+    // Seguro extra: si el ID no tiene ninguna actividad reciente, tratarlo
+    // como dado de baja y no mostrar nada (aunque esta funcion se abra desde
+    // algun lugar que no haya pasado ya por el filtro de busqueda/matriz)
+    const masRecienteGlobal = filasOrdenadas[0] ? periodoKeyDe(filasOrdenadas[0]) : null;
+    if(ESTADO.fechaCorteBajas && masRecienteGlobal && masRecienteGlobal < ESTADO.fechaCorteBajas){
+      document.getElementById('modalOverlay').innerHTML = `
+        <div class="modal">
+          <span class="closeX" onclick="cerrarModal()">✕</span>
+          <p class="smallNote">Este ID no tiene actividad reciente (posible baja formal) — no se muestra historial.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const filas = filasOrdenadas
       .slice(0, 2) // solo corte final + periodo en curso, no todo el historial
       .map(r => `
         <tr>
@@ -1078,12 +1097,19 @@ async function buscarUsuario(q){
     });
 
     // ¿Aparece en el periodo más reciente de SU contrato? (para avisar "no aparece en mes actual")
-    const items = await Promise.all(Object.values(porId).map(async (r) => {
+    const items = (await Promise.all(Object.values(porId).map(async (r) => {
       const periodosContrato = await obtenerPeriodosDeContrato(r.contrato);
       const masReciente = periodosContrato[0];
       const apareceEnActual = masReciente && (periodoKeyDe(r) === masReciente);
       return { row:r, apareceEnActual, masReciente };
-    }));
+    })))
+    // Ocultar jugadores dados de baja: sin ninguna fila dentro de la ventana de actividad reciente
+    .filter(it => !ESTADO.fechaCorteBajas || periodoKeyDe(it.row) >= ESTADO.fechaCorteBajas);
+
+    if(items.length === 0){
+      resultsBox.innerHTML = '<div class="searchItem">Sin resultados activos (puede que el ID/usuario ya esté dado de baja).</div>';
+      return;
+    }
 
     resultsBox.innerHTML = items.map(it => `
       <div class="searchItem" onclick='seleccionarDeBusqueda(${JSON.stringify({contrato:it.row.contrato, periodo:periodoKeyDe(it.row), id_tiktok:it.row.id_tiktok}).replace(/"/g,'&quot;')})'>
