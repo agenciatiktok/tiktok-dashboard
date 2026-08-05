@@ -982,7 +982,20 @@ async function abrirHistorial(idTiktok){
       .eq('id_tiktok', idTiktok);
     if(error) throw error;
 
-    const filasOrdenadas = (data||[]).sort((a,b) => (periodoKeyDe(b)||'').localeCompare(periodoKeyDe(a)||''));
+    // Agrupar por mes -- nos quedamos con el ULTIMO corte de cada mes calendario
+    // (para el mes en curso, ese "ultimo corte" es simplemente la subida mas
+    // reciente disponible, ya que el mes no ha cerrado)
+    const porMes = {};
+    (data||[]).forEach(r => {
+      const k = periodoKeyDe(r);
+      if(!k) return;
+      const mesKey = k.slice(0, 7);
+      if(!porMes[mesKey] || k > periodoKeyDe(porMes[mesKey])){
+        porMes[mesKey] = r;
+      }
+    });
+    const filasOrdenadas = Object.values(porMes)
+      .sort((a,b) => (periodoKeyDe(b)||'').localeCompare(periodoKeyDe(a)||''));
 
     // Seguro extra: si el ID no tiene ninguna actividad reciente, tratarlo
     // como dado de baja y no mostrar nada (aunque esta funcion se abra desde
@@ -999,7 +1012,7 @@ async function abrirHistorial(idTiktok){
     }
 
     const filas = filasOrdenadas
-      .slice(0, 2) // solo corte final + periodo en curso, no todo el historial
+      .slice(0, 6) // ultimos 6 cierres de mes (no 6 subidas sueltas)
       .map(r => `
         <tr>
           <td>${fmtFecha(periodoKeyDe(r))}</td>
@@ -1017,7 +1030,7 @@ async function abrirHistorial(idTiktok){
     document.getElementById('modalOverlay').innerHTML = `
       <div class="modal">
         <span class="closeX" onclick="cerrarModal()">✕</span>
-        <h3>📜 Corte final + periodo en curso — ${idTiktok}</h3>
+        <h3>📜 Últimos cierres de mes — ${idTiktok}</h3>
         ${filas ? `
           <table>
             <thead><tr>
