@@ -480,7 +480,7 @@ async function cargarPeriodo(periodo){
   wrap.innerHTML = '<p class="loading">Cargando...</p>';
 
   try{
-    // probamos por fecha_periodo primero, si no hay filas probamos fecha_datos
+    // 1) Filas crudas del periodo (dias/horas/diamantes/pagado)
     let { data, error } = await sb
       .from('usuarios_tiktok')
       .select('*')
@@ -499,13 +499,73 @@ async function cargarPeriodo(periodo){
       data = r2.data;
     }
 
-    renderTablaUsuarios(data || [], periodo);
+    // 2) Sueldo del CONTRATO (manager) este periodo — resumen_contratos.total_final
+    let sueldoContrato = null;
+    try{
+      const { data: resumen, error: errResumen } = await sb
+        .from('resumen_contratos')
+        .select('*')
+        .eq('contrato', ESTADO.contratoAbierto)
+        .eq('periodo', periodo);
+      if(!errResumen && resumen && resumen.length){
+        sueldoContrato = resumen[0].total_final ?? null;
+      }
+    }catch(e){ /* silencioso: resumen_contratos puede no existir para B-series */ }
+
+    // 3) Incentivo por jugador (A-series) — reportes_contratos, columnas detectadas en vivo
+    let incentivoPorUsuario = {};
+    if(!esSerieB(ESTADO.contratoAbierto)){
+      try{
+        const { data: rep, error: errRep } = await sb
+          .from('reportes_contratos')
+          .select('*')
+          .eq('contrato', ESTADO.contratoAbierto)
+          .eq('periodo', periodo);
+        if(!errRep && rep){
+          rep.forEach(r => { incentivoPorUsuario[r.usuario_id] = r; });
+        }
+      }catch(e){ /* silencioso */ }
+    }
+
+    renderTablaUsuarios(data || [], periodo, sueldoContrato, incentivoPorUsuario);
   }catch(e){
     wrap.innerHTML = `<div class="errBox">⚠️ Error cargando el periodo: ${e.message}</div>`;
   }
 }
 
-function renderTablaUsuarios(rows, periodo){
+// Detecta el nombre real de columna de incentivo en una fila de reportes_contratos
+// (no asumimos nombre fijo — probamos candidatos y usamos el primero que exista)
+function extraerIncentivo(repRow){
+  if(!repRow) return { tipo:null, monto:0 };
+  const candCoins  = ['incentivo_coins','coins_incentivo','total_coins'];
+  const candPaypal = ['incentivo_paypal','paypal_incentivo','total_paypal'];
+
+  for(const c of candCoins){
+    if(repRow[c] !== undefined && repRow[c] !== null && Number(repRow[c]) > 0){
+      return { tipo:'coins', monto:Number(repRow[c]) };
+    }
+  }
+  for(const c of candPaypal){
+    if(repRow[c] !== undefined && repRow[c] !== null && Number(repRow[c]) > 0){
+      return { tipo:'paypal', monto:Number(repRow[c]) };
+    }
+  }
+  return { tipo:null, monto:0 };
+}
+
+function renderIncentivoTexto(row, repRow){
+  if(esSerieB(row.contrato)){
+    // B-series: paypal_bruto en usuarios_tiktok YA ES el regalo del jugador
+    const v = Number(row.paypal_bruto || 0);
+    return v > 0 ? fmtMoney(v) : '—';
+  }
+  const inc = extraerIncentivo(repRow);
+  if(inc.tipo === 'coins') return `${inc.monto.toLocaleString('es-MX')} coins`;
+  if(inc.tipo === 'paypal') return fmtMoney(inc.monto);
+  return '—';
+}
+
+function renderTablaUsuarios(rows, periodo, sueldoContrato, incentivoPorUsuario){
   const wrap = document.getElementById('tablaWrap');
   if(rows.length === 0){
     wrap.innerHTML = '<p class="smallNote">Sin jugadores en este periodo.</p>';
@@ -514,7 +574,22 @@ function renderTablaUsuarios(rows, periodo){
 
   const marcable = esPeriodoMarcable(periodo);
 
-  const filas = rows.map(r => `
+  // Orden: mayor dias, luego mayor horas
+  const rowsOrdenadas = [...rows].sort((a,b) => {
+    const d = (b.dias ?? 0) - (a.dias ?? 0);
+    if(d !== 0) return d;
+    return (b.horas ?? 0) - (a.horas ?? 0);
+  });
+
+  // sueldo_pagado del contrato: tomamos el valor de la primera fila (debe ser
+  // igual en todas, ya que es una sola decisión por contrato+periodo)
+  const sueldoPagado = !!(rows[0] && rows[0].sueldo_pagado);
+  const confirmadoPorSueldo = rows[0] ? rows[0].confirmado_por_sueldo : null;
+  const fechaPagoSueldo = rows[0] ? rows[0].fecha_pago_sueldo : null;
+
+  const filas = rowsOrdenadas.map(r => {
+    const repRow = incentivoPorUsuario[r.id_tiktok] || incentivoPorUsuario[r.id] || null;
+    return `
     <tr class="userRow" data-id="${r.id_tiktok}">
       <td onclick="abrirHistorial('${r.id_tiktok}')" style="color:var(--cyan); cursor:pointer; font-weight:bold;">${r.usuario || '(sin nombre)'}</td>
       <td class="smallNote">${r.id_tiktok}</td>
@@ -522,19 +597,27 @@ function renderTablaUsuarios(rows, periodo){
       <td>${r.horas ?? '—'}</td>
       <td>${(r.diamantes ?? 0).toLocaleString('es-MX')}</td>
       <td>${r.cumple || '—'}</td>
-      <td>${fmtMoney(r.paypal_bruto)}</td>
-      <td>${renderToggle(r, 'sueldo', marcable)}</td>
-      <td>${renderToggle(r, 'regalo', marcable)}</td>
+      <td>${renderIncentivoTexto(r, repRow)}</td>
+      <td>${renderToggleRegalo(r, marcable)}</td>
     </tr>
-  `).join('');
+  `;}).join('');
 
   wrap.innerHTML = `
     ${marcable ? '' : '<div class="histBadge" style="margin-bottom:8px;">📜 Periodo histórico — solo lectura, no se puede marcar (regla: pagos válidos desde 2026)</div>'}
+
+    <div style="background:var(--panel); border:2px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div class="smallNote">💰 SUELDO DEL CONTRATO (manager) — este periodo</div>
+        <div style="font-size:22px; font-weight:bold; color:var(--cyan);">${sueldoContrato !== null ? fmtMoney(sueldoContrato) : 'Sin dato (resumen_contratos vacío)'}</div>
+      </div>
+      <div>${renderToggleSueldoContrato(sueldoPagado, confirmadoPorSueldo, fechaPagoSueldo, marcable)}</div>
+    </div>
+
     <table>
       <thead>
         <tr>
           <th>Usuario</th><th>ID</th><th>Días</th><th>Horas</th><th>Diamantes</th>
-          <th>Cumple</th><th>Sueldo</th><th>Sueldo pagado</th><th>Regalo pagado</th>
+          <th>Cumple</th><th>Incentivo</th><th>Regalo pagado</th>
         </tr>
       </thead>
       <tbody>${filas}</tbody>
@@ -542,22 +625,33 @@ function renderTablaUsuarios(rows, periodo){
   `;
 }
 
-function renderToggle(row, campo, marcable){
-  const pagado = campo === 'sueldo' ? row.sueldo_pagado : row.regalo_pagado;
-  const confirmadoPor = campo === 'sueldo' ? row.confirmado_por_sueldo : row.confirmado_por_regalo;
-  const fechaPago = campo === 'sueldo' ? row.fecha_pago_sueldo : row.fecha_pago_regalo;
-
+function renderToggleRegalo(row, marcable){
   if(!marcable){
     return `<span class="payToggle pay-locked">🔒 N/A</span>`;
   }
+  const pagado = !!row.regalo_pagado;
+  const clase = pagado ? 'pay-yes' : 'pay-no';
+  const icono = pagado ? '✅' : '⬜';
+  const label = pagado ? 'Pagado' : 'No pagado';
+  const tip = pagado ? `title="Marcó: ${row.confirmado_por_regalo || '—'} · ${fmtFecha(row.fecha_pago_regalo)}"` : '';
 
+  return `<span class="payToggle ${clase}" ${tip}
+            onclick='abrirConfirmacion(${JSON.stringify({scope:"individual", id_tiktok:row.id_tiktok, usuario:row.usuario, periodo:ESTADO.periodoActual, campo:"regalo", valorActual:pagado})})'>
+            ${icono} ${label}
+          </span>`;
+}
+
+function renderToggleSueldoContrato(pagado, confirmadoPor, fechaPago, marcable){
+  if(!marcable){
+    return `<span class="payToggle pay-locked" style="font-size:15px;">🔒 N/A (histórico)</span>`;
+  }
   const clase = pagado ? 'pay-yes' : 'pay-no';
   const icono = pagado ? '✅' : '⬜';
   const label = pagado ? 'Pagado' : 'No pagado';
   const tip = pagado ? `title="Marcó: ${confirmadoPor || '—'} · ${fmtFecha(fechaPago)}"` : '';
 
-  return `<span class="payToggle ${clase}" ${tip}
-            onclick='abrirConfirmacion(${JSON.stringify({id_tiktok:row.id_tiktok, usuario:row.usuario, periodo:ESTADO.periodoActual, campo:campo, valorActual:!!pagado})})'>
+  return `<span class="payToggle ${clase}" ${tip} style="font-size:15px; padding:8px 16px;"
+            onclick='abrirConfirmacion(${JSON.stringify({scope:"contrato", contrato:ESTADO.contratoAbierto, periodo:ESTADO.periodoActual, campo:"sueldo", valorActual:!!pagado})})'>
             ${icono} ${label}
           </span>`;
 }
@@ -567,8 +661,13 @@ function renderToggle(row, campo, marcable){
 // ================================================================
 function abrirConfirmacion(payload){
   const nuevoValor = !payload.valorActual;
-  const campoLabel = payload.campo === 'sueldo' ? 'SUELDO' : 'REGALO';
   const hoy = new Date().toISOString().slice(0,10);
+
+  const esContrato = payload.scope === 'contrato';
+  const tituloContexto = esContrato
+    ? `Todo el contrato <b>${payload.contrato}</b> (TODOS los jugadores de este periodo)`
+    : `Solo <b>${payload.usuario || payload.id_tiktok}</b>`;
+  const campoLabel = payload.campo === 'sueldo' ? 'SUELDO (del manager)' : 'REGALO (de este jugador)';
 
   const overlay = document.getElementById('modalOverlay');
   overlay.classList.remove('hidden');
@@ -576,8 +675,9 @@ function abrirConfirmacion(payload){
     <div class="modal">
       <span class="closeX" onclick="cerrarModal()">✕</span>
       <h3>${nuevoValor ? '✅ Marcar como PAGADO' : '⬜ Marcar como NO pagado'}</h3>
-      <p>Usuario: <b>${payload.usuario || payload.id_tiktok}</b></p>
+      <p>Afecta a: ${tituloContexto}</p>
       <p>Campo: <b>${campoLabel}</b></p>
+      ${esContrato ? '<p class="smallNote">⚠️ Esto marca el sueldo del CONTRATO completo, no de un jugador en particular.</p>' : ''}
       <p>Vas a marcar esto como <b>${nuevoValor ? 'PAGADO' : 'NO PAGADO'}</b>.</p>
       ${nuevoValor ? `
         <label class="smallNote">Fecha de pago:</label><br>
@@ -617,31 +717,54 @@ async function confirmarPago(payload, nuevoValor){
   };
 
   try{
-    // Update por id_tiktok + periodo (probamos fecha_periodo, luego fecha_datos)
-    let { data, error, count } = await sb
-      .from('usuarios_tiktok')
-      .update(updateObj)
-      .eq('id_tiktok', payload.id_tiktok)
-      .eq('fecha_periodo', payload.periodo)
-      .select();
+    let data, error;
 
-    if((!data || data.length === 0) && !error){
-      const r2 = await sb
+    if(payload.scope === 'contrato'){
+      // BULK: aplica a TODAS las filas de ese contrato+periodo (sueldo es uno solo por manager)
+      let r = await sb
+        .from('usuarios_tiktok')
+        .update(updateObj)
+        .eq('contrato', payload.contrato)
+        .eq('fecha_periodo', payload.periodo)
+        .select();
+
+      if((!r.data || r.data.length === 0) && !r.error){
+        r = await sb
+          .from('usuarios_tiktok')
+          .update(updateObj)
+          .eq('contrato', payload.contrato)
+          .eq('fecha_datos', payload.periodo)
+          .select();
+      }
+      data = r.data; error = r.error;
+
+    } else {
+      // INDIVIDUAL: solo esa fila (id_tiktok + periodo)
+      let r = await sb
         .from('usuarios_tiktok')
         .update(updateObj)
         .eq('id_tiktok', payload.id_tiktok)
-        .eq('fecha_datos', payload.periodo)
+        .eq('fecha_periodo', payload.periodo)
         .select();
-      data = r2.data; error = r2.error;
+
+      if((!r.data || r.data.length === 0) && !r.error){
+        r = await sb
+          .from('usuarios_tiktok')
+          .update(updateObj)
+          .eq('id_tiktok', payload.id_tiktok)
+          .eq('fecha_datos', payload.periodo)
+          .select();
+      }
+      data = r.data; error = r.error;
     }
 
     if(error) throw error;
     if(!data || data.length === 0){
-      msgBox.innerHTML = '<div class="errBox">⚠️ No se encontró la fila exacta a actualizar (revisa periodo/id_tiktok).</div>';
+      msgBox.innerHTML = '<div class="errBox">⚠️ No se encontró ninguna fila que actualizar (revisa periodo/contrato/id_tiktok).</div>';
       return;
     }
 
-    msgBox.innerHTML = '<div class="okBox">✅ Guardado.</div>';
+    msgBox.innerHTML = `<div class="okBox">✅ Guardado (${data.length} fila${data.length>1?'s':''}).</div>`;
     setTimeout(async () => {
       cerrarModal();
       await cargarPeriodo(ESTADO.periodoActual);
@@ -670,6 +793,7 @@ async function abrirHistorial(idTiktok){
 
     const filas = (data||[])
       .sort((a,b) => (periodoKeyDe(b)||'').localeCompare(periodoKeyDe(a)||''))
+      .slice(0, 2) // solo corte final + periodo en curso, no todo el historial
       .map(r => `
         <tr>
           <td>${fmtFecha(periodoKeyDe(r))}</td>
@@ -687,7 +811,7 @@ async function abrirHistorial(idTiktok){
     document.getElementById('modalOverlay').innerHTML = `
       <div class="modal">
         <span class="closeX" onclick="cerrarModal()">✕</span>
-        <h3>📜 Historial completo — ${idTiktok}</h3>
+        <h3>📜 Corte final + periodo en curso — ${idTiktok}</h3>
         ${filas ? `
           <table>
             <thead><tr>
