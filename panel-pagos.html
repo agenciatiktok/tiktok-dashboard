@@ -915,10 +915,15 @@ async function cargarResumenEquipo(){
   wrap.innerHTML = `
     <div style="background:var(--panel); border:2px solid var(--cyan); border-radius:10px; padding:14px 18px; margin-top:14px;">
       <div class="smallNote">💰 SUMA TOTAL DEL EQUIPO — este periodo (tú + todos los que te reportan)</div>
-      <div style="margin-top:8px;">${filasHtml}</div>
+      <div style="font-size:13px; color:var(--gray); margin-top:6px; line-height:1.5;">
+        📌 <b>Este es el pago real:</b> en la práctica, todo este dinero se te entrega a TI en un solo pago.
+        El desglose de abajo (por contrato) es referencia interna — así sabes cuánto le corresponde
+        a cada empleado para que tú repartas, no son pagos separados.
+      </div>
+      <div style="margin-top:12px;">${filasHtml}</div>
       <div style="max-width:480px; padding:6px 0; border-top:1px solid var(--border); margin-top:6px; font-weight:bold;">
         <div style="display:flex; justify-content:space-between; font-size:18px;">
-          <span>TOTAL PayPal</span><span style="color:var(--cyan);">${fmtMoney(totalPaypalGeneral)}</span>
+          <span>TOTAL PayPal (lo que recibes tú)</span><span style="color:var(--cyan);">${fmtMoney(totalPaypalGeneral)}</span>
         </div>
         ${totalCoinsGeneral > 0 ? `
         <div style="display:flex; justify-content:space-between; font-size:15px; margin-top:4px;">
