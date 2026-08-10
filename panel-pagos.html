@@ -870,6 +870,11 @@ async function cargarResumenEquipo(){
   const codigoBase = ESTADO.contratoAbierto;
   const todos = [codigoBase, ...equipo.map(s => s.contrato)];
 
+  // Usar el MISMO MES que esta seleccionado arriba (no siempre el mas reciente
+  // de cada contrato -- Nexus y Vertex cierran en fechas distintas aunque sea
+  // "el mismo mes", por eso se compara por mes, no por fecha exacta)
+  const mesObjetivo = (ESTADO.periodoActual || "").slice(0, 7);
+
   const filas = [];
   let totalPaypalGeneral = 0;
   let totalCoinsGeneral = 0;
@@ -880,12 +885,13 @@ async function cargarResumenEquipo(){
     let montoCoins = null;
     try{
       const periodos = await obtenerPeriodosDeContrato(c);
-      if(periodos.length){
+      const periodoDelMes = periodos.find(p => p.slice(0, 7) === mesObjetivo);
+      if(periodoDelMes){
         const { data } = await sb
           .from('resumen_contratos')
           .select('total_final, total_coins')
           .eq('contrato', c)
-          .eq('periodo', periodos[0])
+          .eq('periodo', periodoDelMes)
           .maybeSingle();
         if(data){
           if(data.total_final !== null && data.total_final !== undefined) montoPaypal = Number(data.total_final);
