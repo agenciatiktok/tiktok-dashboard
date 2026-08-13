@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.2 — 2026-08-13
+  VERSION: v1.2.1 — 2026-08-13
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -16,6 +16,14 @@
           diamantes"), y el minimo de dias/horas usa dias_min/horas_min del
           capricho en vez del 7/15 fijo. Objetivo: que un mes con regalo solo
           en PayPal o solo en Coins (por diseno) no se vea como error.
+  v1.2.1 -- fix: el banner/override de v1.2 ahora solo se activa si el
+          capricho tiene moneda_regalo (caprichoActivo()). Los 3 casos
+          historicos (leoncitaaly/yaze_ortiz/la.consentida) son bitacora sin
+          moneda_regalo -- ningun script los consulta todavia, su regla real
+          sigue siendo el hardcode viejo. Sin este fix se les mostraba un
+          banner con datos falsos ("0.00% de tus diamantes"). Solo
+          82jl11/A001 y micafecito08/A053 (casos reales conectados a scripts
+          19/17) activan el banner por ahora.
 -->
 <html lang="es">
 <head>
@@ -272,6 +280,15 @@ async function cargarCapricho() {
     }
 }
 
+// Un capricho solo cuenta como "activo" (conectado al calculo real) si tiene
+// moneda_regalo -- las filas historicas de bitacora (leoncitaaly, yaze_ortiz,
+// la.consentida) no lo tienen, porque ningun script las consulta todavia y
+// su regla real sigue siendo el hardcode viejo, no % de diamantes. Mostrar
+// el banner nuevo para esas filas seria mostrar informacion falsa.
+function caprichoActivo() {
+    return !!(capricho && capricho.moneda_regalo);
+}
+
 async function cargarUmbralesVertex() {
     try {
         const { data } = await sb.from('incentivos_custom_vertex').select('*');
@@ -406,10 +423,15 @@ async function precargarTodo() {
             aplicaTablaHorizontal = false;
         }
 
-        // Capricho por porcentaje: no usa tramos de tabla aunque el tipo de
-        // contrato normalmente sí la use -- si no se apaga aqui, se le muestra
-        // al jugador un mensaje falso de "faltan X diamantes para tu regalo".
-        if (capricho && capricho.tipo_pago === 'porcentaje') {
+        // Capricho REAL (conectado al calculo -- moneda_regalo lleno) por
+        // porcentaje: no usa tramos de tabla aunque el tipo de contrato
+        // normalmente si la use -- si no se apaga aqui, se le muestra al
+        // jugador un mensaje falso de "faltan X diamantes para tu regalo".
+        // Los 3 casos historicos (leoncitaaly/yaze_ortiz/la.consentida) son
+        // solo bitacora -- moneda_regalo vacio -- y NO deben activar esto,
+        // porque el codigo real de sus contratos sigue siendo el hardcode
+        // viejo, no % de diamantes.
+        if (caprichoActivo() && capricho.tipo_pago === 'porcentaje') {
             aplicaTablaHorizontal = false;
         }
 
@@ -481,7 +503,7 @@ function renderInfoCard() {
         document.getElementById('info-contrato').innerHTML = txt;
     }
 
-    if (capricho) {
+    if (caprichoActivo()) {
         const monedaTxt = capricho.moneda_regalo === 'paypal' ? 'PayPal'
             : capricho.moneda_regalo === 'coins' ? 'Coins'
             : capricho.moneda_regalo === 'ambos' ? 'PayPal y Coins'
@@ -584,8 +606,8 @@ function renderCards() {
             }
             // contrato B no reconocido en ninguna lista -- se deja sin mensaje, no se inventa umbral
         } else {
-            const diasMin = (capricho && capricho.dias_min != null) ? capricho.dias_min : 7;
-            const horasMin = (capricho && capricho.horas_min != null) ? capricho.horas_min : 15;
+            const diasMin = (caprichoActivo() && capricho.dias_min != null) ? capricho.dias_min : 7;
+            const horasMin = (caprichoActivo() && capricho.horas_min != null) ? capricho.horas_min : 15;
             const cumpleMinimo = (f.dias || 0) >= diasMin && horasDecimal >= horasMin;
             if (!cumpleMinimo) {
             const diasFaltan = Math.max(0, diasMin - (f.dias || 0));
@@ -602,7 +624,7 @@ function renderCards() {
             } else {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--cyan);">💎 Cumples días/horas — te faltan ${diamFaltan.toLocaleString('es-MX')} diamantes para tu primer regalo.</div>`;
             }
-        } else if (capricho && capricho.tipo_pago === 'porcentaje' && esCierre && !tieneRegalo) {
+        } else if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && esCierre && !tieneRegalo) {
             // Cumplio minimo pero el % de ese mes dio 0 (o no aplico) -- se explica
             // en vez de dejarlo como casilla vacia sin contexto
             const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : 'tu %';
