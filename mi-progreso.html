@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.2.1 — 2026-08-13
+  VERSION: v1.3 — 2026-08-13
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -24,6 +24,15 @@
           banner con datos falsos ("0.00% de tus diamantes"). Solo
           82jl11/A001 y micafecito08/A053 (casos reales conectados a scripts
           19/17) activan el banner por ahora.
+  v1.3 -- agregado: vista "maquillada" (visual, NO escribe en Supabase) para
+          meses de caprichos por % ANTERIORES al cierre de julio 2026
+          (FECHA_CORTE_REAL), ya pagados con la formula vieja (tabla). Se
+          recalcula solo en pantalla con diamantes*regalo_pct/10000 (formula
+          verificada contra los valores reales de julio-2026 de 82jl11 y
+          micafecito08, diff <$0.01). Desde el corte en adelante se usa el
+          dato real de reportes_contratos sin tocar. Regla general para
+          todos los caprichos futuros -- no requiere backfill de base de
+          datos, solo la fila en excepciones_calculo_jugador.
 -->
 <html lang="es">
 <head>
@@ -576,12 +585,38 @@ function renderCards() {
         const nombreMes = `${MESES[d.getMonth()]} ${d.getFullYear()}`;
         const ultimoDiaMes = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
         const esCierre = d.getDate() === ultimoDiaMes;
+
+        const horasDecimal = parseHorasDecimal(f.duracion);
+        const diamantes = f.diamantes || 0;
+
+        // Vista "maquillada" para meses YA PAGADOS antes del corte real (cierre
+        // de julio 2026). El jugador tiene capricho por % pero ese dinero ya se
+        // pago con la formula vieja (tabla) -- aqui NO se toca ningun dato en
+        // Supabase, solo se recalcula el valor a mostrar en pantalla para que
+        // se vea consistente con su regla actual. Formula verificada contra
+        // datos reales de julio 2026 (82jl11 y micafecito08): diamantes *
+        // regalo_pct / 10000. Regla general para todos los caprichos futuros:
+        // antes del corte = visual: FECHA_CORTE_REAL, desde ahi = real (ya
+        // viene bien calculado en reportes_contratos por el codigo conectado).
+        const FECHA_CORTE_REAL = '2026-07-31';
+        if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && f.fecha_datos < FECHA_CORTE_REAL) {
+            const diasMinC = capricho.dias_min != null ? capricho.dias_min : 7;
+            const horasMinC = capricho.horas_min != null ? capricho.horas_min : 15;
+            const cumpleC = (f.dias || 0) >= diasMinC && horasDecimal >= horasMinC;
+            const montoVisual = cumpleC ? (diamantes * Number(capricho.regalo_pct) / 10000) : 0;
+            if (capricho.moneda_regalo === 'paypal' || capricho.moneda_regalo === 'ambos') {
+                f.paypal_incentivo = montoVisual;
+            }
+            if (capricho.moneda_regalo === 'coins' || capricho.moneda_regalo === 'ambos') {
+                // Formula de coins aun no verificada contra un caso real -- se
+                // deja el valor original en vez de inventar una conversion
+            }
+        }
+
         const tieneRegalo = (f.paypal_incentivo > 0) || (f.coins_incentivo > 0);
 
         const val = (v) => (v === null || v === undefined) ? '<span class="sin-dato">—</span>' : Number(v).toLocaleString('es-MX');
 
-        const horasDecimal = parseHorasDecimal(f.duracion);
-        const diamantes = f.diamantes || 0;
         const esVertexRow = f.contrato && f.contrato.toString().toUpperCase().startsWith('B');
         const contratoUpper = f.contrato ? f.contrato.toString().toUpperCase() : '';
 
