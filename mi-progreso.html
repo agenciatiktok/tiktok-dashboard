@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.1 — 2026-07-31
+  VERSION: v1.2 — 2026-08-13
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -9,6 +9,13 @@
           anteriores (historico_usuarios), regalo (incentivo) por mes si
           aplica, tabla de incentivos de referencia con columna resaltada
           segun el contrato del jugador (nivel1_tabla3).
+  v1.2 -- agregado: lectura de excepciones_calculo_jugador (capricho). Si el
+          jugador tiene regla especial: banner explicando %/moneda/minimo en
+          info-card, se desactiva la tabla de tramos estandar cuando el
+          capricho es por porcentaje (evita mensaje falso de "faltan
+          diamantes"), y el minimo de dias/horas usa dias_min/horas_min del
+          capricho en vez del 7/15 fijo. Objetivo: que un mes con regalo solo
+          en PayPal o solo en Coins (por diseno) no se vea como error.
 -->
 <html lang="es">
 <head>
@@ -195,6 +202,7 @@
             <div id="info-incorporacion">—</div>
             <div id="info-contrato" style="margin-top:6px;"></div>
             <div id="info-nombres" class="nombres-anteriores"></div>
+            <div id="info-capricho" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--cyan);font-size:12px;line-height:1.5;"></div>
         </div>
 
         <div class="chart-card">
@@ -248,6 +256,21 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 let UMBRALES_VERTEX = {};
 let VERTEX_TABLA_PROPIA = [];
 let VERTEX_SIN_REGALO = [];
+
+// Capricho (excepcion individual de calculo) del jugador, si existe.
+// Tabla compartida Nexus+Vertex, clave por id_tiktok. Mientras no tenga fila,
+// se comporta exactamente como un jugador normal (capricho = null).
+let capricho = null;
+
+async function cargarCapricho() {
+    try {
+        const { data } = await sb.from('excepciones_calculo_jugador')
+            .select('*').eq('id_tiktok', idTiktok).maybeSingle();
+        capricho = data || null;
+    } catch (e) {
+        capricho = null; // tabla vacia, RLS aun no listo, o sin fila -- comportamiento seguro
+    }
+}
 
 async function cargarUmbralesVertex() {
     try {
@@ -309,6 +332,7 @@ async function validarYEntrar(token) {
 
 async function precargarTodo() {
     await cargarUmbralesVertex();
+    await cargarCapricho();
 
     let todas = [];
     let off = 0;
@@ -382,6 +406,13 @@ async function precargarTodo() {
             aplicaTablaHorizontal = false;
         }
 
+        // Capricho por porcentaje: no usa tramos de tabla aunque el tipo de
+        // contrato normalmente sí la use -- si no se apaga aqui, se le muestra
+        // al jugador un mensaje falso de "faltan X diamantes para tu regalo".
+        if (capricho && capricho.tipo_pago === 'porcentaje') {
+            aplicaTablaHorizontal = false;
+        }
+
         const nivelReal = historialCompleto[historialCompleto.length - 1].nivel || 0;
         nivelActualReferencia = nivel1Tabla3Actual ? 3 : (nivelReal > 0 ? nivelReal : 1);
     }
@@ -448,6 +479,28 @@ function renderInfoCard() {
         let txt = `📋 Contrato: <b>${esc(contratoActual)}</b>`;
         if (agenteActual) txt += ` — Agente: <b>${esc(agenteActual)}</b>`;
         document.getElementById('info-contrato').innerHTML = txt;
+    }
+
+    if (capricho) {
+        const monedaTxt = capricho.moneda_regalo === 'paypal' ? 'PayPal'
+            : capricho.moneda_regalo === 'coins' ? 'Coins'
+            : capricho.moneda_regalo === 'ambos' ? 'PayPal y Coins'
+            : 'PayPal y/o Coins';
+        let txt;
+        if (capricho.tipo_pago === 'porcentaje') {
+            const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : '—';
+            txt = `⚡ <b>Regla de pago especial:</b> tu regalo se calcula como ${pctTxt} de tus diamantes del mes, pagado en <b>${monedaTxt}</b>`;
+        } else {
+            txt = `⚡ <b>Regla de pago especial:</b> tu regalo sigue la tabla normal, pero se paga en <b>${monedaTxt}</b>`;
+        }
+        if (capricho.dias_min != null || capricho.horas_min != null) {
+            txt += ` (mínimo ${capricho.dias_min ?? 7}d / ${capricho.horas_min ?? 15}h)`;
+        }
+        txt += '.';
+        if (capricho.notas) txt += ` <span style="color:var(--muted)">${esc(capricho.notas)}</span>`;
+        const el = document.getElementById('info-capricho');
+        el.innerHTML = txt;
+        el.style.display = 'block';
     }
 }
 
@@ -531,12 +584,14 @@ function renderCards() {
             }
             // contrato B no reconocido en ninguna lista -- se deja sin mensaje, no se inventa umbral
         } else {
-            const cumpleMinimo = (f.dias || 0) >= 7 && horasDecimal >= 15;
+            const diasMin = (capricho && capricho.dias_min != null) ? capricho.dias_min : 7;
+            const horasMin = (capricho && capricho.horas_min != null) ? capricho.horas_min : 15;
+            const cumpleMinimo = (f.dias || 0) >= diasMin && horasDecimal >= horasMin;
             if (!cumpleMinimo) {
-            const diasFaltan = Math.max(0, 7 - (f.dias || 0));
-            const horasFaltan = Math.max(0, 15 - horasDecimal);
+            const diasFaltan = Math.max(0, diasMin - (f.dias || 0));
+            const horasFaltan = Math.max(0, horasMin - horasDecimal);
             if (esCierre) {
-                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de 7 días / 15 horas este mes.</div>`;
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de ${diasMin} días / ${horasMin} horas este mes.</div>`;
             } else {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:#ffcc00;">⏳ Aún no alcanzas el mínimo — faltan ${diasFaltan} día${diasFaltan===1?'':'s'} y/o ${horasFaltan.toFixed(1)}h para calificar.</div>`;
             }
@@ -547,6 +602,11 @@ function renderCards() {
             } else {
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--cyan);">💎 Cumples días/horas — te faltan ${diamFaltan.toLocaleString('es-MX')} diamantes para tu primer regalo.</div>`;
             }
+        } else if (capricho && capricho.tipo_pago === 'porcentaje' && esCierre && !tieneRegalo) {
+            // Cumplio minimo pero el % de ese mes dio 0 (o no aplico) -- se explica
+            // en vez de dejarlo como casilla vacia sin contexto
+            const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : 'tu %';
+            notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">💡 Tu regalo se calcula como ${pctTxt} de tus diamantes del mes — este mes no generó regalo.</div>`;
         }
         }
 
