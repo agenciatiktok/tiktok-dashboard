@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.3 — 2026-08-13
+  VERSION: v1.3.1 — 2026-08-13
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -33,6 +33,17 @@
           dato real de reportes_contratos sin tocar. Regla general para
           todos los caprichos futuros -- no requiere backfill de base de
           datos, solo la fila en excepciones_calculo_jugador.
+  v1.3.1 -- fix BUG PREEXISTENTE (desde v1.1, no relacionado a los caprichos):
+          aceptarReglas() solo esperaba a que historialCompleto tuviera
+          longitud > 0, lo cual ocurre ANTES de que termine el cruce async
+          con reportes_contratos (paypal_incentivo/coins_incentivo reales).
+          Si el usuario aceptaba las reglas rapido, se renderizaba con datos
+          crudos de usuarios_tiktok (incentivo=0 en varios tipos de contrato)
+          en vez del valor real -- se detecto porque julio-2026 de 82jl11
+          (post-corte, depende 100% del cruce) mostro "$0 / no genero
+          regalo" con el dato real confirmado en Supabase como $24.37.
+          precargarTodo() ahora se guarda como promesa (precargaPromise) y
+          aceptarReglas() la espera de verdad antes de renderizar.
 -->
 <html lang="es">
 <head>
@@ -278,6 +289,7 @@ let VERTEX_SIN_REGALO = [];
 // Tabla compartida Nexus+Vertex, clave por id_tiktok. Mientras no tenga fila,
 // se comporta exactamente como un jugador normal (capricho = null).
 let capricho = null;
+let precargaPromise = null;
 
 async function cargarCapricho() {
     try {
@@ -353,7 +365,7 @@ async function validarYEntrar(token) {
 
     document.getElementById('token-screen').style.display = 'none';
     document.getElementById('reglas-screen').style.display = 'flex';
-    precargarTodo();
+    precargaPromise = precargarTodo();
 }
 
 async function precargarTodo() {
@@ -474,10 +486,20 @@ async function aceptarReglas() {
     document.getElementById('reglas-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
 
-    let intentos = 0;
-    while (!historialCompleto.length && intentos < 40) {
-        await new Promise(r => setTimeout(r, 150));
-        intentos++;
+    // Bug historico (desde v1.1): antes solo se esperaba a que
+    // historialCompleto tuviera longitud > 0, lo cual pasa ANTES de que
+    // termine el cruce con reportes_contratos (paypal_incentivo/coins_incentivo
+    // reales). Si el usuario aceptaba las reglas rapido, se renderizaba con
+    // datos crudos de usuarios_tiktok (incentivo=0 para varios tipos de
+    // contrato) en vez del valor real. Ahora se espera la promesa completa.
+    if (precargaPromise) {
+        await precargaPromise;
+    } else {
+        let intentos = 0;
+        while (!historialCompleto.length && intentos < 40) {
+            await new Promise(r => setTimeout(r, 150));
+            intentos++;
+        }
     }
 
     if (!historialCompleto.length) {
