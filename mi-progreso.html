@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.3.2 — 2026-08-13
+  VERSION: v1.4 — 2026-08-14
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -49,6 +49,19 @@
           desde el cierre de julio") que no debe ver el jugador. Ese campo
           sigue existiendo en Supabase para uso interno/auditoria, solo se
           dejo de mostrar en la pantalla del jugador.
+  v1.4 -- lote de 28 caprichos nuevos (2026-08-14): (1) corte de "maquillado
+          vs real" ahora usa el activo_desde de CADA capricho en vez de una
+          fecha fija (2026-07-31) -- necesario porque el lote de agosto tiene
+          activo_desde=2026-08-31, distinto al de julio. (2) Se completa la
+          formula de coins en la vista maquillada, antes dejada pendiente sin
+          verificar -- ahora usa diamantes*regalo_pct/100 (ratio 100:1,
+          confirmado y verificado contra produccion real). (3) El factor de
+          descuento (aplica_descuento_paypal) ahora tambien se aplica en la
+          vista maquillada, no solo en el calculo real del backend. (4) Se
+          conecta visible_jugador: si es false (caso especifico del capricho
+          de 2.8%), el banner y el mensaje de "no genero regalo" se ocultan
+          -- pero el CALCULO real (maquillado y futuro) sigue igual de
+          correcto, solo se oculta la explicacion visual.
 -->
 <html lang="es">
 <head>
@@ -539,7 +552,11 @@ function renderInfoCard() {
         document.getElementById('info-contrato').innerHTML = txt;
     }
 
-    if (caprichoActivo()) {
+    // visible_jugador=false (ej. el capricho de 2.8%) significa: calcula
+    // normal, pero el jugador NUNCA ve el banner explicandolo -- por eso este
+    // chequeo va aqui, en el render del banner, y NO dentro de caprichoActivo()
+    // (que sigue gateando el CALCULO real, eso no se apaga para nadie).
+    if (caprichoActivo() && capricho.visible_jugador !== false) {
         const monedaTxt = capricho.moneda_regalo === 'paypal' ? 'PayPal'
             : capricho.moneda_regalo === 'coins' ? 'Coins'
             : capricho.moneda_regalo === 'ambos' ? 'PayPal y Coins'
@@ -619,27 +636,30 @@ function renderCards() {
         const horasDecimal = parseHorasDecimal(f.duracion);
         const diamantes = f.diamantes || 0;
 
-        // Vista "maquillada" para meses YA PAGADOS antes del corte real (cierre
-        // de julio 2026). El jugador tiene capricho por % pero ese dinero ya se
-        // pago con la formula vieja (tabla) -- aqui NO se toca ningun dato en
-        // Supabase, solo se recalcula el valor a mostrar en pantalla para que
-        // se vea consistente con su regla actual. Formula verificada contra
-        // datos reales de julio 2026 (82jl11 y micafecito08): diamantes *
-        // regalo_pct / 10000. Regla general para todos los caprichos futuros:
-        // antes del corte = visual: FECHA_CORTE_REAL, desde ahi = real (ya
-        // viene bien calculado en reportes_contratos por el codigo conectado).
-        const FECHA_CORTE_REAL = '2026-07-31';
-        if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && f.fecha_datos < FECHA_CORTE_REAL) {
+        // Vista "maquillada" para meses YA PAGADOS antes del corte real (el
+        // activo_desde de CADA capricho, no una fecha fija -- distintos
+        // caprichos pueden arrancar en fechas distintas, ej. cierre de julio
+        // para unos, cierre de agosto para otros). El jugador tiene capricho
+        // por % pero ese dinero ya se pago con la formula vieja (tabla) --
+        // aqui NO se toca ningun dato en Supabase, solo se recalcula el valor
+        // a mostrar en pantalla para que se vea consistente con su regla
+        // actual. Formula verificada contra datos reales de produccion
+        // (82jl11, micafecito08, y el lote de 19 IDs recalculado 2026-08-14):
+        // paypal = diamantes*regalo_pct/10000, coins = diamantes*regalo_pct/100
+        // (ratio fijo 100 monedas = $1 USD para caprichos, confirmado por
+        // Angel -- distinto al 125:1 de la tabla vieja de incentivos_horizontales).
+        if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && capricho.activo_desde && f.fecha_datos < capricho.activo_desde) {
             const diasMinC = capricho.dias_min != null ? capricho.dias_min : 7;
             const horasMinC = capricho.horas_min != null ? capricho.horas_min : 15;
             const cumpleC = (f.dias || 0) >= diasMinC && horasDecimal >= horasMinC;
-            const montoVisual = cumpleC ? (diamantes * Number(capricho.regalo_pct) / 10000) : 0;
+            const factorC = capricho.aplica_descuento_paypal === true ? 0.8 : 1.0;
+            const montoVisualPaypal = cumpleC ? (diamantes * Number(capricho.regalo_pct) / 10000 * factorC) : 0;
+            const montoVisualCoins  = cumpleC ? Math.round(diamantes * Number(capricho.regalo_pct) / 100 * factorC) : 0;
             if (capricho.moneda_regalo === 'paypal' || capricho.moneda_regalo === 'ambos') {
-                f.paypal_incentivo = montoVisual;
+                f.paypal_incentivo = montoVisualPaypal;
             }
             if (capricho.moneda_regalo === 'coins' || capricho.moneda_regalo === 'ambos') {
-                // Formula de coins aun no verificada contra un caso real -- se
-                // deja el valor original en vez de inventar una conversion
+                f.coins_incentivo = montoVisualCoins;
             }
         }
 
@@ -691,9 +711,15 @@ function renderCards() {
             }
         } else if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && esCierre && !tieneRegalo) {
             // Cumplio minimo pero el % de ese mes dio 0 (o no aplico) -- se explica
-            // en vez de dejarlo como casilla vacia sin contexto
-            const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : 'tu %';
-            notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">💡 Tu regalo se calcula como ${pctTxt} de tus diamantes del mes — este mes no generó regalo.</div>`;
+            // en vez de dejarlo como casilla vacia sin contexto. Si
+            // visible_jugador=false, se oculta el % (mismo criterio que el
+            // banner) y se deja un mensaje generico sin revelar la regla.
+            if (capricho.visible_jugador === false) {
+                notaMinimo = '';
+            } else {
+                const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : 'tu %';
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">💡 Tu regalo se calcula como ${pctTxt} de tus diamantes del mes — este mes no generó regalo.</div>`;
+            }
         }
         }
 
