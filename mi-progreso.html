@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.3.1 — 2026-08-13
+  VERSION: v1.3.2 — 2026-08-13
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -44,6 +44,11 @@
           regalo" con el dato real confirmado en Supabase como $24.37.
           precargarTodo() ahora se guarda como promesa (precargaPromise) y
           aceptarReglas() la espera de verdad antes de renderizar.
+  v1.3.2 -- fix: se quita capricho.notas del banner de mi-progreso.html --
+          es texto administrativo interno (ej. "PRUEBA: cambia de tabla a 2%
+          desde el cierre de julio") que no debe ver el jugador. Ese campo
+          sigue existiendo en Supabase para uso interno/auditoria, solo se
+          dejo de mostrar en la pantalla del jugador.
 -->
 <html lang="es">
 <head>
@@ -550,7 +555,10 @@ function renderInfoCard() {
             txt += ` (mínimo ${capricho.dias_min ?? 7}d / ${capricho.horas_min ?? 15}h)`;
         }
         txt += '.';
-        if (capricho.notas) txt += ` <span style="color:var(--muted)">${esc(capricho.notas)}</span>`;
+        // NOTA: capricho.notas es texto administrativo interno (para
+        // auditoria/panel-pagos.html), no para el jugador -- NUNCA mostrarlo
+        // aqui, aunque diga cosas como "PRUEBA" o jerga de "tabla vs %" que
+        // no le corresponde ver al jugador.
         const el = document.getElementById('info-capricho');
         el.innerHTML = txt;
         el.style.display = 'block';
