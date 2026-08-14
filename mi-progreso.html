@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.4 — 2026-08-14
+  VERSION: v1.4.1 — 2026-08-14
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -62,6 +62,10 @@
           de 2.8%), el banner y el mensaje de "no genero regalo" se ocultan
           -- pero el CALCULO real (maquillado y futuro) sigue igual de
           correcto, solo se oculta la explicacion visual.
+  v1.4.1 -- fix: para visible_jugador=false, el mensaje de "no genero regalo"
+          SI debe mostrarse (el jugador necesita saber que ese mes no le
+          toco nada) -- solo el % exacto se oculta. v1.4 lo dejaba en
+          silencio total por error, reportado por Angel.
 -->
 <html lang="es">
 <head>
@@ -712,10 +716,11 @@ function renderCards() {
         } else if (caprichoActivo() && capricho.tipo_pago === 'porcentaje' && esCierre && !tieneRegalo) {
             // Cumplio minimo pero el % de ese mes dio 0 (o no aplico) -- se explica
             // en vez de dejarlo como casilla vacia sin contexto. Si
-            // visible_jugador=false, se oculta el % (mismo criterio que el
-            // banner) y se deja un mensaje generico sin revelar la regla.
+            // visible_jugador=false, el mensaje SI debe salir (el jugador
+            // necesita saber que no genero regalo), solo se oculta el %
+            // exacto -- eso es lo unico que no debe revelarse.
             if (capricho.visible_jugador === false) {
-                notaMinimo = '';
+                notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">💡 Este mes no generó regalo.</div>`;
             } else {
                 const pctTxt = capricho.regalo_pct != null ? `${Number(capricho.regalo_pct).toFixed(2)}%` : 'tu %';
                 notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--muted);">💡 Tu regalo se calcula como ${pctTxt} de tus diamantes del mes — este mes no generó regalo.</div>`;
