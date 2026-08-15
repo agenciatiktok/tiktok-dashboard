@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   mi-progreso.html — TikTok Live Mi Progreso Individual
-  VERSION: v1.4.1 — 2026-08-14
+  VERSION: v1.4.2 — 2026-08-15
 
   CHANGELOG:
   v1.0 -- base: historial mensual + grafica de diamantes
@@ -66,6 +66,13 @@
           SI debe mostrarse (el jugador necesita saber que ese mes no le
           toco nada) -- solo el % exacto se oculta. v1.4 lo dejaba en
           silencio total por error, reportado por Angel.
+  v1.4.2 -- fix: en meses maquillados, si el capricho paga SOLO en una
+          moneda (ej. moneda_regalo='paypal'), la otra moneda ahora se
+          fuerza a 0 en vez de dejar el valor historico real de tabla.
+          Detectado con VERIFICAR_MIPROGRESO.py (script de auditoria que
+          replica esta logica en Python): 82jl11 y micafecito08 mostraban
+          coins viejas reales (a veces miles) en cada mes maquillado,
+          inconsistente con la historia de "siempre cobre asi".
 -->
 <html lang="es">
 <head>
@@ -664,6 +671,19 @@ function renderCards() {
             }
             if (capricho.moneda_regalo === 'coins' || capricho.moneda_regalo === 'ambos') {
                 f.coins_incentivo = montoVisualCoins;
+            }
+            // Consistencia del maquillado: si el capricho paga SOLO en una
+            // moneda, la otra tambien se pone en 0 -- antes se quedaba con
+            // el valor historico real de tabla (a veces miles de coins),
+            // lo que se veia inconsistente con la historia de "siempre
+            // cobre asi". Confirmado con datos reales 2026-08-15 (82jl11,
+            // micafecito08 -- moneda='paypal' mostraba coins viejas reales
+            // en cada mes maquillado).
+            if (capricho.moneda_regalo === 'paypal') {
+                f.coins_incentivo = 0;
+            }
+            if (capricho.moneda_regalo === 'coins') {
+                f.paypal_incentivo = 0;
             }
         }
 
