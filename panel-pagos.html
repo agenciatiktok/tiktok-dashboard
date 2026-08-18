@@ -1009,9 +1009,12 @@ async function toggleMatrizMultiMes(contrato){
     // periodos distintos, agrupados por mes (1 corte final por mes), tope 6 meses
     const periodosSetRaw = new Set(rows.map(r => periodoKeyDe(r)).filter(Boolean));
     const periodos = agruparPorMesUltimoCorte(Array.from(periodosSetRaw)).slice(0, 6);
-    // Orden de columnas tipo Excel original: mes actual primero, luego los
-    // anteriores en orden ascendente (no todo cronologico de corrido)
-    const periodosAsc = periodos.length ? [periodos[0], ...periodos.slice(1).reverse()] : [];
+    // v1.1 (2026-08-18): periodos ya viene ordenado descendente real
+    // (agruparPorMesUltimoCorte hace .sort().reverse()) -- el reordenamiento
+    // de abajo (comentario "tipo Excel original") copiaba un bug del Excel
+    // que saltaba al mes mas viejo y avanzaba de nuevo en vez de seguir
+    // retrocediendo. Ya arreglado en el Excel tambien, aqui sobra reordenar.
+    const periodosAsc = periodos;
 
     // Incentivo real (A-series) para poder calcular Cumple igual que index.html --
     // cruce por periodo+usuario, mismo criterio que el resto del panel
