@@ -675,6 +675,13 @@ function renderPaypalTexto(row, repRow){
 // panel nunca diga Si/No distinto de lo que el jugador ve en mi-progreso.html.
 // B-series: confia en el 'cumple' que sube Vertex (umbral propio por contrato).
 // A002/A006/A014: regla fija 7d/15h. Resto de A-series: cumple = tiene incentivo real.
+// [PARKSON 8/20] espejo de utils/reglas_umbral.py
+function umbralMinimoNexus(r){
+  const ag = String(r.agencia || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const f = String(r.fecha_datos || '').slice(0, 7);
+  return (ag === 'PARKSON LATAM' && f >= '2026-09') ? [8, 20] : [7, 15];
+}
+
 function calcularCumpleReal(row, repRow){
   if(esSerieB(row.contrato)){
     return row.cumple === true || row.cumple === 'true' || row.cumple === 'SI';
@@ -682,7 +689,8 @@ function calcularCumpleReal(row, repRow){
   const fuente = repRow || row;
   const tieneRegalo = Number(fuente.paypal_incentivo || 0) > 0 || Number(fuente.coins_incentivo || 0) > 0;
   if(row.contrato === 'A002' || row.contrato === 'A006' || row.contrato === 'A014'){
-    return (row.dias || 0) >= 7 && (row.horas || 0) >= 15;
+    const u = umbralMinimoNexus(row); // [PARKSON 8/20]
+    return (row.dias || 0) >= u[0] && (row.horas || 0) >= u[1];
   }
   return tieneRegalo;
 }
