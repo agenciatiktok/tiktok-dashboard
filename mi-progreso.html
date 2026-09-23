@@ -274,7 +274,7 @@
             <div class="chart-title">🏆 Tabla de incentivos de referencia</div>
             <div class="tabla-incentivos-nota" id="tabla-incentivos-nota"></div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-                Requisito mínimo por nivel — <b style="color:var(--text)">Nivel 1:</b> 7 días / 15h &nbsp;|&nbsp;
+                Requisito mínimo por nivel — <b style="color:var(--text)">Nivel 1:</b> <span id="txt-umbral-n1">7 días / 15h</span> &nbsp;|&nbsp;
                 <b style="color:var(--text)">Nivel 2:</b> 14 días / 30h &nbsp;|&nbsp;
                 <b style="color:var(--text)">Nivel 3:</b> 20 días / 40h
             </div>
@@ -346,12 +346,20 @@ async function cargarUmbralesVertex() {
             data.forEach(row => {
                 if (row.sin_regalo) { VERTEX_SIN_REGALO.push(row.codigo); return; }
                 if (row.usa_tabla_propia) { VERTEX_TABLA_PROPIA.push(row.codigo); return; }
-                UMBRALES_VERTEX[row.codigo] = { dias: row.dias_min, horas: row.horas_min };
+                UMBRALES_VERTEX[row.codigo] = { dias: row.dias_min, horas: row.horas_min, diasBonus: row.dias_bonus ?? null, horasBonus: row.horas_bonus ?? null, pctBonus: row.regalo_pct_bonus ?? null }; // [VERTEX CUMPLE]
             });
         }
     } catch (e) {
         // Tabla vacia o RLS aun no habilitado -- se queda vacio, comportamiento seguro
     }
+}
+
+// [PARKSON 8/20] espejo de utils/reglas_umbral.py -- minimo N1 Nexus
+function umbralMinimoNexus(f) {
+    if (!f) return [7, 15];
+    const ag = String(f.agencia || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    const fe = String(f.fecha_datos || '').slice(0, 7);
+    return (ag === 'PARKSON LATAM' && fe >= '2026-09') ? [8, 20] : [7, 15];
 }
 
 function parseHorasDecimal(duracion) {
@@ -405,7 +413,7 @@ async function precargarTodo() {
     let off = 0;
     while (true) {
         const { data } = await sb.from('usuarios_tiktok')
-            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,agente,nivel,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,fecha_incorporacion,paypal_incentivo,coins_incentivo')
+            .select('usuario,dias,duracion,diamantes,fecha_datos,contrato,agente,nivel,partidas,nuevos_seguidores,nuevos_fans,fans_totales,fans_activos_club,fecha_incorporacion,paypal_incentivo,coins_incentivo,cumple,agencia')
             .eq('id_tiktok', idTiktok)
             .range(off, off + 999);
         if (!data || !data.length) break;
@@ -563,6 +571,9 @@ function renderInfoCard() {
         document.getElementById('info-contrato').innerHTML = txt;
     }
 
+    // [PARKSON 8/20] requisito N1 segun el ultimo mes del jugador
+    { const uUlt = umbralMinimoNexus(historialCompleto[historialCompleto.length - 1]); const elN1 = document.getElementById('txt-umbral-n1'); if (elN1) elN1.textContent = `${uUlt[0]} días / ${uUlt[1]}h`; }
+
     // visible_jugador=false (ej. el capricho de 2.8%) significa: calcula
     // normal, pero el jugador NUNCA ve el banner explicandolo -- por eso este
     // chequeo va aqui, en el render del banner, y NO dentro de caprichoActivo()
@@ -580,7 +591,7 @@ function renderInfoCard() {
             txt = `⚡ <b>Regla de pago especial:</b> tu regalo sigue la tabla normal, pero se paga en <b>${monedaTxt}</b>`;
         }
         if (capricho.dias_min != null || capricho.horas_min != null) {
-            txt += ` (mínimo ${capricho.dias_min ?? 7}d / ${capricho.horas_min ?? 15}h)`;
+            txt += ` (mínimo ${Math.max(Number(capricho.dias_min ?? 0), umbralMinimoNexus(historialCompleto[historialCompleto.length - 1])[0])}d / ${Math.max(Number(capricho.horas_min ?? 0), umbralMinimoNexus(historialCompleto[historialCompleto.length - 1])[1])}h)`;
         }
         txt += '.';
         // NOTA: capricho.notas es texto administrativo interno (para
@@ -700,23 +711,34 @@ function renderCards() {
             if (VERTEX_SIN_REGALO.includes(contratoUpper) || VERTEX_TABLA_PROPIA.includes(contratoUpper)) {
                 // B001 no paga regalo; B011/B018/B020 usan tabla de tramos propia -- no se adivina, no se muestra
                 notaMinimo = '';
-            } else if (UMBRALES_VERTEX[contratoUpper]) {
-                const umbral = UMBRALES_VERTEX[contratoUpper];
-                const cumpleVertex = (f.dias || 0) >= umbral.dias && horasDecimal >= umbral.horas;
+            } else {
+                // [VERTEX CUMPLE] veredicto = usuarios_tiktok.cumple (motor de Vertex, umbral minimo real).
+                // incentivos_custom_vertex solo alimenta los textos de "faltan" y del bonus. Nexus NO recalcula Vertex.
+                const umbral = UMBRALES_VERTEX[contratoUpper] || null;
+                const cumpleVertex = (f.cumple === true || f.cumple === 'true' || f.cumple === 'SI');
                 if (!cumpleVertex) {
-                    const diasFaltan = Math.max(0, umbral.dias - (f.dias || 0));
-                    const horasFaltan = Math.max(0, umbral.horas - horasDecimal);
                     if (esCierre) {
-                        notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de ${umbral.dias} días / ${umbral.horas} horas este mes.</div>`;
-                    } else {
+                        notaMinimo = umbral
+                            ? `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de ${umbral.dias} días / ${umbral.horas} horas este mes.</div>`
+                            : `<div style="margin-top:8px;font-size:11px;color:var(--red-t);">❌ No alcanzó el mínimo de su contrato este mes.</div>`;
+                    } else if (umbral) {
+                        const diasFaltan = Math.max(0, umbral.dias - (f.dias || 0));
+                        const horasFaltan = Math.max(0, umbral.horas - horasDecimal);
                         notaMinimo = `<div style="margin-top:8px;font-size:11px;color:#ffcc00;">⏳ Aún no alcanzas el mínimo — faltan ${diasFaltan} día${diasFaltan===1?'':'s'} y/o ${horasFaltan.toFixed(1)}h para calificar.</div>`;
+                    }
+                } else if (umbral && umbral.diasBonus != null && umbral.horasBonus != null && !esCierre) {
+                    const diasFB = Math.max(0, umbral.diasBonus - (f.dias || 0));
+                    const horasFB = Math.max(0, umbral.horasBonus - horasDecimal);
+                    if (diasFB > 0 || horasFB > 0) {
+                        const pctTxt = umbral.pctBonus != null ? ` (${Number(umbral.pctBonus)}%)` : '';
+                        notaMinimo = `<div style="margin-top:8px;font-size:11px;color:var(--cyan);">🚀 Ya cumples el mínimo. Para el bonus${pctTxt} de ${umbral.diasBonus} días / ${umbral.horasBonus}h te faltan ${diasFB} día${diasFB===1?'':'s'} y/o ${horasFB.toFixed(1)}h.</div>`;
                     }
                 }
             }
-            // contrato B no reconocido en ninguna lista -- se deja sin mensaje, no se inventa umbral
         } else {
-            const diasMin = (caprichoActivo() && capricho.dias_min != null) ? capricho.dias_min : 7;
-            const horasMin = (caprichoActivo() && capricho.horas_min != null) ? capricho.horas_min : 15;
+            const uN = umbralMinimoNexus(f); // [PARKSON 8/20]
+            const diasMin = Math.max(uN[0], (caprichoActivo() && capricho.dias_min != null) ? Number(capricho.dias_min) : 0);
+            const horasMin = Math.max(uN[1], (caprichoActivo() && capricho.horas_min != null) ? Number(capricho.horas_min) : 0);
             const cumpleMinimo = (f.dias || 0) >= diasMin && horasDecimal >= horasMin;
             if (!cumpleMinimo) {
             const diasFaltan = Math.max(0, diasMin - (f.dias || 0));
